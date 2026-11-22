@@ -22,7 +22,12 @@ SEEDS  ?= 16
 SEED   ?= 1
 FREQ   ?= 100
 BUDGET ?= 1216
+# UART device: Linux ttyUSB1 (FT2232H channel B); macOS picks the last /dev/cu.usbserial-*
+ifeq ($(shell uname -s),Darwin)
+PORT   ?= $(lastword $(sort $(wildcard /dev/cu.usbserial-*)))
+else
 PORT   ?= /dev/ttyUSB1
+endif
 D      ?= blinky
 NOTE   ?=
 
@@ -32,6 +37,11 @@ DESIGNS := blinky uart_echo
 blinky_SRC    := rtl/board/blinky.sv
 uart_echo_SRC := rtl/board/uart_echo.sv rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
 uart_echo_TB  := sim/uart_echo_tb.sv
+
+# GNU make 3.81 (macOS default) ignores .SHELLFLAGS, so recipes with pipes set pipefail
+# themselves; `timeout` is optional (coreutils `gtimeout` on macOS).
+TIMEOUT := $(shell command -v timeout || command -v gtimeout)
+RUN_TIMEOUT = $(if $(TIMEOUT),$(TIMEOUT) $(1))
 
 # ---- tool flags -------------------------------------------------------------------
 PNR_FLAGS := --hx1k --package tq144 --pcf $(PCF) --freq $(FREQ) --timing-allow-fail
@@ -50,6 +60,7 @@ help:
 	@echo "make report NOTE='...'     sweep + append rows to results.csv (do this before committing hardware changes)"
 	@echo "make check  [BASE=rev]     CI gate: budget, stale results.csv, silent regressions"
 	@echo "make toolchain / versions  fetch the pinned OSS CAD Suite / print tool versions"
+	@echo "(UART port: $(PORT))"
 
 all: bits
 
@@ -96,7 +107,7 @@ sim-%:
 	@mkdir -p $(B)/sim/$*
 	verilator $(VSIMFLAGS) --top-module $*_tb -Mdir $(B)/sim/$* $($*_TB) $($*_SRC) > $(B)/sim-$*.log 2>&1 \
 	  || { cat $(B)/sim-$*.log; exit 1; }
-	timeout 300 $(B)/sim/$*/V$*_tb | grep -v '^- '
+	set -o pipefail; $(call RUN_TIMEOUT,300) $(B)/sim/$*/V$*_tb | grep -v '^- '
 
 lint: $(DESIGNS:%=lint-%)
 lint-%:
@@ -104,6 +115,7 @@ lint-%:
 
 # ---- board ------------------------------------------------------------------------
 uart-test:
+	@test -n "$(PORT)" || { echo "no UART found; pass PORT=/dev/..."; exit 1; }
 	python3 scripts/uart_test.py --port $(PORT)
 
 # ---- toolchain ------------------------------------------------------------------
