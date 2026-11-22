@@ -25,7 +25,16 @@ OSS CAD Suite 2026-11-01, 16 nextpnr seeds, uniform harness with 4 KB RAM and an
 | Minimax | 1253 | 60.0 / 55.9 |
 | PicoRV32 (small) | does not fit | — |
 
-## Reproduce
+## Quick start (Debian)
+```
+scripts/setup_debian.sh        # packages, udev rule, groups, pinned OSS CAD Suite
+make bits && make prog D=uart_echo && make uart-test
+make help                      # everything else
+```
+Measurement and CI rules: [docs/process.md](docs/process.md). Board bring-up:
+[docs/phase1/bringup.md](docs/phase1/bringup.md).
+
+## Reproduce the baselines
 ```
 scripts/fetch_toolchain.sh && scripts/fetch_baselines.sh
 cd baselines && SEEDS=16 ./build.sh

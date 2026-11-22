@@ -3,7 +3,8 @@
 utilisation and Fmax (median / worst / best).
 
 usage: pnr_sweep.py NAME NETLIST.json PCF [--seeds 16] [--jobs 2] [--freq 100]
-                    [--device hx1k --package tq144] [--csv out.csv]
+                    [--device hx1k --package tq144] [--csv out.csv] [--out row.json]
+PCF may be "none" (pins left unconstrained).
 
 Numbers come from nextpnr's --report JSON (utilisation after placement, Fmax of
 the 'clk' domain). Nothing is taken from Yosys `stat`.
@@ -38,9 +39,11 @@ def main():
     p.add_argument("--clock", default="clk")
     p.add_argument("--asc", action="store_true")
     p.add_argument("--csv")
+    p.add_argument("--out", help="write the summary row as JSON to this file")
+    p.add_argument("--outdir", help="per-seed reports/logs (default: next to the netlist)")
     a = p.parse_args()
 
-    outdir = os.path.join(os.path.dirname(a.netlist) or ".", f"pnr_{a.name}_{a.device}")
+    outdir = a.outdir or os.path.join(os.path.dirname(a.netlist) or ".", f"pnr_{a.name}_{a.device}")
     os.makedirs(outdir, exist_ok=True)
     with ThreadPoolExecutor(a.jobs) as ex:
         res = list(ex.map(lambda s: run(s, a, outdir), range(1, a.seeds + 1)))
@@ -64,6 +67,9 @@ def main():
                fmax_worst=round(min(fmax), 2), fmax_best=round(max(fmax), 2),
                freq_target=a.freq)
     print(json.dumps(row))
+    if a.out:
+        with open(a.out, "w") as f:
+            json.dump(row, f)
     if a.csv:
         new = not os.path.exists(a.csv)
         with open(a.csv, "a", newline="") as f:
