@@ -1,0 +1,55 @@
+# Lattice iCEstick (iCE40HX1K-TQ144) — every user-facing pin.
+# -nowarn: a design may leave any of these unconnected.
+# Pin numbers cross-checked against swapforth j1a.pcf and learn-fpga BOARDS/icestick.pcf.
+
+# 12 MHz oscillator
+set_io -nowarn clk          21
+
+# LEDs: D1..D4 red (around the edge), D5 green (centre)
+set_io -nowarn led[0]       99
+set_io -nowarn led[1]       98
+set_io -nowarn led[2]       97
+set_io -nowarn led[3]       96
+set_io -nowarn led[4]       95
+
+# FT2232H channel B UART (directions from the FPGA's side)
+set_io -nowarn uart_tx       8
+set_io -nowarn uart_rx       9
+
+# Pmod J2 (2x6): pins 1-4 top row, 7-10 bottom row
+set_io -nowarn pmod[0]      78
+set_io -nowarn pmod[1]      79
+set_io -nowarn pmod[2]      80
+set_io -nowarn pmod[3]      81
+set_io -nowarn pmod[4]      87
+set_io -nowarn pmod[5]      88
+set_io -nowarn pmod[6]      90
+set_io -nowarn pmod[7]      91
+
+# Header J1 (PIO0_02..09)
+set_io -nowarn hdr_j1[0]   112
+set_io -nowarn hdr_j1[1]   113
+set_io -nowarn hdr_j1[2]   114
+set_io -nowarn hdr_j1[3]   115
+set_io -nowarn hdr_j1[4]   116
+set_io -nowarn hdr_j1[5]   117
+set_io -nowarn hdr_j1[6]   118
+set_io -nowarn hdr_j1[7]   119
+
+# Header J3 (PIO2_10..17)
+set_io -nowarn hdr_j3[0]    44
+set_io -nowarn hdr_j3[1]    45
+set_io -nowarn hdr_j3[2]    47
+set_io -nowarn hdr_j3[3]    48
+set_io -nowarn hdr_j3[4]    56
+set_io -nowarn hdr_j3[5]    60
+set_io -nowarn hdr_j3[6]    61
+set_io -nowarn hdr_j3[7]    62
+
+# IrDA transceiver
+set_io -nowarn irda_tx     105
+set_io -nowarn irda_rx     106
+set_io -nowarn irda_sd     107
+
+# SPI flash (shared with configuration; avoid unless you mean it)
+# set_io spi_sck 70  spi_sdo 67(MOSI) spi_sdi 68(MISO) spi_ss 71

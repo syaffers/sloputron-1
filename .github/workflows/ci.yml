@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2            # rule 5 of check_results.py diffs against HEAD^
+
+      - name: Cache pinned OSS CAD Suite
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: tools/oss-cad-suite
+          key: oss-cad-suite-2026-11-01-linux-x64
+
+      - name: Fetch pinned OSS CAD Suite
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/fetch_toolchain.sh linux-x64
+
+      - name: Tool versions
+        run: make versions
+
+      - name: Lint
+        run: make lint
+
+      - name: Simulate
+        run: make sim
+
+      - name: Bitstreams
+        run: make bits
+
+      - name: 16-seed sweep and results.csv gate
+        run: |
+          BASE=""
+          if git rev-parse -q --verify HEAD^ > /dev/null; then BASE=HEAD^; fi
+          make check SEEDS=16 BASE=$BASE
+
+      - name: Upload bitstreams and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: |
+            build/*.bin
+            build/*/sweep.json
+            build/*/pnr.json
+          if-no-files-found: ignore
+
+  # Same flow on Apple Silicon. Checks that the Makefile works with macOS's GNU make 3.81
+  # and that darwin-arm64 tools give the same cells/BRAMs/Fmax as linux-x64, so rows made
+  # on a Mac pass the Linux gate.
+  macos:
+    runs-on: macos-latest   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Cache pinned OSS CAD Suite
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: tools/oss-cad-suite
+          key: oss-cad-suite-2026-11-01-darwin-arm64
+
+      - name: Fetch pinned OSS CAD Suite
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/fetch_toolchain.sh darwin-arm64
+
+      - name: Tool versions
+        run: make --version | head -1 && make versions
+
+      - name: Lint, simulate, bitstreams
+        run: make lint sim bits
+
+      - name: 16-seed sweep and results.csv gate
+        run: make check SEEDS=16

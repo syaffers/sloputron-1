@@ -51,21 +51,35 @@ entirely in an iCE40HX1K-TQ144.
 ## Layout
 ```
 CLAUDE.md                 this file
+Makefile                  the flow: bits, prog, sim, lint, sweep, report, check (`make help`)
+results.csv               one row per design per hardware commit (docs/process.md)
+board/icestick.pcf        every iCEstick pin, by port name (clk, led[4:0], uart_tx/rx, pmod[7:0], hdr_j1/j3)
+rtl/board/                top-level designs (top module name = design name)
+rtl/lib/                  shared RTL (uart_rx, uart_tx)
+sim/                      self-checking Verilator testbenches (print PASS or $fatal)
+docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
+docs/phase1/bringup.md    board bring-up steps and checklist
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
-scripts/yosys_stats.py    supplementary LUT/DFF/CARRY breakdown from Yosys logs
+scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
+scripts/uart_test.py      host-side loopback test against uart_echo
+scripts/setup_*.sh        one-shot setup: setup_debian.sh (apt, udev, groups) / setup_macos.sh; both fetch the toolchain
 scripts/fetch_*.sh        pinned toolchain and baseline sources (into tools/ and ext/, gitignored)
+.github/workflows/ci.yml  lint, sim, bitstreams, 16-seed sweep, results.csv gate (linux-x86_64 + macOS arm64)
 ```
 
 ## Commands
 ```
-scripts/fetch_toolchain.sh && scripts/fetch_baselines.sh
-cd baselines && SEEDS=16 ./build.sh               # all baselines; or ./build.sh leros j1a ...
-python3 scripts/pnr_sweep.py NAME netlist.json pins.pcf --seeds 16 --csv out.csv
+make help                         # all targets
+make bits / make prog D=uart_echo # build / flash (board machine only)
+make sim lint                     # before every commit
+make report NOTE="..."            # 16-seed sweep -> results.csv rows; required with any rtl/ or board/ change
+make check                        # what CI runs
+cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fetch_baselines.sh)
 ```
-`build.sh` appends to `baselines/baselines.csv`. Use a scratch copy, or set `CSV`, for trial runs.
+`baselines/build.sh` appends to `baselines/baselines.csv`. Use a scratch copy, or set `CSV`, for trial runs.
 
 ## Status
 - **Phase 0 (done):** literature survey, baselines (16 seeds), shortlist.
@@ -73,8 +87,10 @@ python3 scripts/pnr_sweep.py NAME netlist.json pins.pcf --seeds 16 --csv out.csv
   - J1a: 1013 LC at 79 MHz.
   - PicoRV32 small: does not fit.
   - See `docs/phase0/baselines.md`.
-- **Phase 1 (next):** repo skeleton, Makefile, report script, CI, and blinky + UART echo on
-  the board to prove the flow.
+- **Phase 1 (in progress):** done in the repo:
+  - Makefile flow, results.csv with a CI gate;
+  - blinky (30 LC) and hardware UART echo (86 LC), simulation passing.
+  - Waiting on the board run: `docs/phase1/bringup.md` checklist.
 - **Phase 2:** primitive cost table plus bare datapath skeletons of the finalists. The first
   experiment is J1a with stacks in BRAM, to confirm the estimate of ~450–550 LC.
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
@@ -96,6 +112,13 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
 - Is a C compiler ever a goal, or is assembly enough?
 
 ## Working on the board (local sessions)
-The iCEstick is attached to the owner's machine; cloud sessions cannot reach it. Flash with
-`iceprog <bitstream>.bin`. The UART is the FT2232H's second interface (e.g. `/dev/ttyUSB1` on
-Linux). Keep I/O hardware minimal; a UART may end up as a software thread.
+- The iCEstick is attached to the owner's machine: a Debian trixie PC or a MacBook Air M2.
+  Cloud sessions cannot reach it.
+- First-time setup: `scripts/setup_debian.sh` (then log out and back in), or
+  `scripts/setup_macos.sh`.
+- Flash with `make prog D=<design>`. On a Mac, `sudo` if the FTDI device can't be claimed.
+- UART (FT2232H channel B): `/dev/ttyUSB1` on Linux, the last `/dev/cu.usbserial-*` on a
+  Mac. `make uart-test` picks it; override with `PORT=`.
+- results.csv rows record the platform. Cells/BRAMs are identical across platforms; Fmax
+  differs slightly (see `docs/process.md`). Comparison tables use linux-x86_64 (CI).
+- Keep I/O hardware minimal; a UART may end up as a software thread.
