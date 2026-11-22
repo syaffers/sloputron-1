@@ -56,7 +56,7 @@ jobs:
   # and that darwin-arm64 tools give the same cells/BRAMs/Fmax as linux-x64, so rows made
   # on a Mac pass the Linux gate.
   macos:
-    runs-on: macos-14
+    runs-on: macos-latest   # Apple Silicon
     steps:
       - uses: actions/checkout@v4
         with:
