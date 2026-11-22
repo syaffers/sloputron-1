@@ -1,0 +1,9 @@
+# fetched, not versioned
+/ext/
+/tools/
+# build outputs
+build/
+*.asc
+*.bin
+*.json.tmp
+__pycache__/
