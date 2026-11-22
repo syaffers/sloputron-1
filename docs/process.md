@@ -20,14 +20,16 @@ git add -A && git commit
 | fmax_median, fmax_worst | MHz, `clk` domain, over `seeds` nextpnr seeds (1..N), target 100 MHz |
 | seeds | number of seeds (≥ 16) |
 | toolchain | OSS CAD Suite release; Yosys; nextpnr |
+| platform | where the sweep ran, e.g. `linux-x86_64`, `darwin-arm64` |
 | bench_cycles, code_size | filled once a CPU runs the benchmarks (Phase 3+) |
 | note | required whenever cells go up or median Fmax falls more than 2% |
 
 ## What CI checks (`make check`, `scripts/check_results.py`)
 1. **Budget:** every design ≤ 1216 LC (95% of 1280) and ≤ 16 BRAMs.
-2. **Not stale:** the fresh measurement matches the newest row for the design. Cells and
-   BRAMs must match exactly (the flow is deterministic for a pinned toolchain); median
-   Fmax must be within 1%.
+2. **Not stale:** the fresh measurement matches the newest row for the design.
+   - Cells and BRAMs must match exactly on every platform.
+   - Median Fmax must be within 1% of the newest row from the same platform, or within 3%
+     if that row came from another platform.
 3. **Present:** every design has at least one row.
 4. **No silent regression:** versus the previous row, more cells or a > 2% Fmax drop
    needs a non-empty `note`.
@@ -35,6 +37,21 @@ git add -A && git commit
    `results.csv` changed too.
 
 CI also lints, runs the self-checking simulations and uploads the bitstreams.
+
+## Platforms
+The pinned toolchain gives bit-identical results run to run on one platform: GitHub's
+linux-x86_64 runner reproduced this machine's numbers exactly. Across platforms, cell and
+BRAM counts are identical, but nextpnr's placements differ slightly. Measured 2026-11-23 on
+`uart_echo`, 16 seeds:
+
+| Platform | Median Fmax | Worst Fmax |
+|---|---|---|
+| linux-x86_64 | 172.83 MHz | 158.28 MHz |
+| darwin-arm64 (Apple Silicon) | 172.00 MHz | 163.91 MHz |
+
+So medians differ by 0.5% and worst seeds by 3.5%. Rows made on a Mac are valid. Tables
+that compare designs (Phase 3 and 7) use **linux-x86_64** numbers, which is what CI runs,
+so every design is compared on one platform.
 
 ## Adding a design
 Add it to the registry at the top of the `Makefile`:

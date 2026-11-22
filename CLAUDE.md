@@ -65,9 +65,9 @@ baselines/                uniform harnesses for third-party cores + build.sh + r
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
 scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
 scripts/uart_test.py      host-side loopback test against uart_echo
-scripts/setup_debian.sh   one-shot setup of the owner's Debian machine (apt, udev, groups, toolchain)
+scripts/setup_*.sh        one-shot setup: setup_debian.sh (apt, udev, groups) / setup_macos.sh; both fetch the toolchain
 scripts/fetch_*.sh        pinned toolchain and baseline sources (into tools/ and ext/, gitignored)
-.github/workflows/ci.yml  lint, sim, bitstreams, 16-seed sweep, results.csv gate
+.github/workflows/ci.yml  lint, sim, bitstreams, 16-seed sweep, results.csv gate (linux-x86_64 + macOS arm64)
 ```
 
 ## Commands
@@ -112,10 +112,13 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
 - Is a C compiler ever a goal, or is assembly enough?
 
 ## Working on the board (local sessions)
-- The iCEstick is attached to the owner's Debian trixie machine; cloud sessions cannot reach
-  it.
-- First-time setup: `scripts/setup_debian.sh`, then log out and back in.
-- Flash with `make prog D=<design>`.
-- The UART is the FT2232H's second interface, `/dev/ttyUSB1`: `make uart-test`, or
-  `picocom -b 115200 /dev/ttyUSB1`.
+- The iCEstick is attached to the owner's machine: a Debian trixie PC or a MacBook Air M2.
+  Cloud sessions cannot reach it.
+- First-time setup: `scripts/setup_debian.sh` (then log out and back in), or
+  `scripts/setup_macos.sh`.
+- Flash with `make prog D=<design>`. On a Mac, `sudo` if the FTDI device can't be claimed.
+- UART (FT2232H channel B): `/dev/ttyUSB1` on Linux, the last `/dev/cu.usbserial-*` on a
+  Mac. `make uart-test` picks it; override with `PORT=`.
+- results.csv rows record the platform. Cells/BRAMs are identical across platforms; Fmax
+  differs slightly (see `docs/process.md`). Comparison tables use linux-x86_64 (CI).
 - Keep I/O hardware minimal; a UART may end up as a software thread.

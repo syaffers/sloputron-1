@@ -1,3 +1,3 @@
-date,commit,design,cells,cells_avail,brams,fmax_median,fmax_worst,seeds,toolchain,bench_cycles,code_size,note
-2026-11-23,7d59442+dirty,blinky,30,1280,0,174.86,174.86,16,oss-cad-suite-20261101;yosys-0.70+286;nextpnr-0.11.1-85-ga2c64799,,,Phase 1 flow check: blinky + hardware UART echo (115200 8N1)
-2026-11-23,7d59442+dirty,uart_echo,86,1280,0,172.83,158.28,16,oss-cad-suite-20261101;yosys-0.70+286;nextpnr-0.11.1-85-ga2c64799,,,Phase 1 flow check: blinky + hardware UART echo (115200 8N1)
+date,commit,design,cells,cells_avail,brams,fmax_median,fmax_worst,seeds,toolchain,platform,bench_cycles,code_size,note
+2026-11-23,cf5d554+dirty,blinky,30,1280,0,174.86,174.86,16,oss-cad-suite-20261101;yosys-0.70+286;nextpnr-0.11.1-85-ga2c64799,linux-x86_64,,,Phase 1 flow check: blinky + hardware UART echo (115200 8N1)
+2026-11-23,cf5d554+dirty,uart_echo,86,1280,0,172.83,158.28,16,oss-cad-suite-20261101;yosys-0.70+286;nextpnr-0.11.1-85-ga2c64799,linux-x86_64,,,Phase 1 flow check: blinky + hardware UART echo (115200 8N1)

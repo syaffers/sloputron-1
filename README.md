@@ -25,9 +25,9 @@ OSS CAD Suite 2026-11-01, 16 nextpnr seeds, uniform harness with 4 KB RAM and an
 | Minimax | 1253 | 60.0 / 55.9 |
 | PicoRV32 (small) | does not fit | — |
 
-## Quick start (Debian)
+## Quick start (Debian or macOS)
 ```
-scripts/setup_debian.sh        # packages, udev rule, groups, pinned OSS CAD Suite
+scripts/setup_debian.sh        # or scripts/setup_macos.sh; installs the pinned OSS CAD Suite
 make bits && make prog D=uart_echo && make uart-test
 make help                      # everything else
 ```

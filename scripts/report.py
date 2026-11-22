@@ -4,7 +4,7 @@
 usage: report.py [--note TEXT] [--csv results.csv] [--bench FILE.json] build/<design>/sweep.json ...
 
 Columns: date, commit, design, cells, cells_avail, brams, fmax_median, fmax_worst,
-seeds, toolchain, bench_cycles, code_size, note
+seeds, toolchain, platform, bench_cycles, code_size, note
 
 `commit` is the HEAD the measurement was taken on, with "+dirty" when the working tree
 has uncommitted changes. Run `make report` just before committing: the row then
@@ -13,10 +13,15 @@ the next one in history (a commit cannot contain its own hash).
 `bench_cycles` and `code_size` stay empty until a CPU runs benchmarks (Phase 3). An
 optional --bench JSON maps design -> {"bench_cycles": "...", "code_size": "..."}.
 """
-import argparse, csv, datetime, json, os, subprocess, sys
+import argparse, csv, datetime, json, os, platform, subprocess, sys
 
 FIELDS = ["date", "commit", "design", "cells", "cells_avail", "brams", "fmax_median",
-          "fmax_worst", "seeds", "toolchain", "bench_cycles", "code_size", "note"]
+          "fmax_worst", "seeds", "toolchain", "platform", "bench_cycles", "code_size", "note"]
+
+def host_platform():
+    """e.g. linux-x86_64, darwin-arm64. nextpnr placement (hence Fmax) differs slightly
+    between platforms; cell and BRAM counts do not."""
+    return f"{platform.system().lower()}-{platform.machine().lower()}"
 
 def sh(*cmd):
     try:
@@ -64,7 +69,7 @@ def main():
             row = dict(date=date, commit=commit, design=r["name"], cells=r["lc"],
                        cells_avail=r["lc_avail"], brams=r["ram"],
                        fmax_median=r["fmax_median"], fmax_worst=r["fmax_worst"],
-                       seeds=r["seeds"], toolchain=tc,
+                       seeds=r["seeds"], toolchain=tc, platform=host_platform(),
                        bench_cycles=b.get("bench_cycles", ""), code_size=b.get("code_size", ""),
                        note=a.note)
             w.writerow(row)
