@@ -46,11 +46,15 @@ claim the FTDI device, use `sudo make prog D=...`; as root, libusb can detach th
 driver. Also unload any third-party FTDI VCP driver installed in the past.
 
 ## Checklist (fill in on the board)
-- [ ] `iceprog` sees the board without sudo (`iceprog -t`)
-- [ ] blinky: LEDs count
-- [ ] uart_echo: `make uart-test` PASS
-- [ ] UART device is `/dev/ttyUSB1` on Linux or `/dev/cu.usbserial-…` on a Mac (record which)
-- [ ] note `iceprog` time for a full flash: ______ s
+Run 2026-11-23 on the Debian trixie dev board (aarch64, `scripts/setup_debian.sh`,
+OSS CAD Suite 2026-11-01 linux-arm64).
+- [x] `iceprog` sees the board without sudo (`iceprog -t`). Needs the `plugdev` group from
+      the setup script; before re-login, `sg plugdev -c "make prog D=..."` works. Flash ID
+      `0x20 0xBA 0x16` (Micron N25Q032, 4 MB).
+- [x] blinky: LEDs count (red binary count, green blinks; checked by eye)
+- [x] uart_echo: `make uart-test` PASS (4096 bytes, 0 bad chunks)
+- [x] UART device is `/dev/ttyUSB1` (Linux)
+- [x] `iceprog` time for a full flash (32,220-byte bitstream, erase + program + verify): 2.6 s
 - [ ] `icebram` round trip, to be done with the first design that has a program BRAM
       (Phase 2/3)
 
