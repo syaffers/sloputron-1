@@ -9,7 +9,7 @@ EXT=${EXT:-$HERE/../ext}
 TOOLS=${TOOLS:-$HERE/../tools/oss-cad-suite}
 [ -d "$TOOLS/bin" ] && export PATH=$TOOLS/bin:$PATH
 SEEDS=${SEEDS:-16}; FREQ=${FREQ:-100}
-B=$HERE/build; C=$HERE/common; CSV=$HERE/baselines.csv
+B=$HERE/build; C=$HERE/common; CSV=${CSV:-$HERE/baselines.csv}   # override for trial runs
 mkdir -p "$B"
 
 synth_v() {   # name top-param-override files...
@@ -29,6 +29,7 @@ SERV_FILES="$HERE/serv/top.v $C/mem32.v $S/servile/*.v $S/rtl/serv_*.v"
 build() {
   case $1 in
   j1a)   synth_v j1a "" "$HERE/j1a/top.v $EXT/swapforth/j1a/verilog/j1.v $EXT/swapforth/j1a/verilog/stack2.v"; pnr j1a ;;
+  j1a_bram) synth_v j1a_bram "" "$HERE/j1a/top.v $EXT/swapforth/j1a/verilog/j1.v $HERE/j1a_bram/stack2.v $HERE/../rtl/lib/stack_bram.sv"; pnr j1a_bram ;;
   j4a)   synth_v j4a "" "$HERE/j4a/top.v $EXT/swapforth/j1a/verilog/j4.v $EXT/swapforth/j1a/verilog/stack2pipe4.v $EXT/swapforth/j1a/verilog/greycount.v"; pnr j4a || pnr j4a --device hx8k --package ct256 ;;
   serv)  synth_v serv "" "$SERV_FILES"; pnr serv ;;
   qerv)  ( cd "$C" && yosys -q -m slang -l "$B/qerv.yslog" -p "read_slang --allow-use-before-declare -G WIDTH=4 --top top $SERV_FILES; synth_ice40 -top top -json $B/qerv.json" ); echo "qerv frontend=slang" >> "$B/frontends.txt"; pnr qerv ;;
@@ -43,4 +44,4 @@ build() {
   esac
 }
 
-for n in "${@:-j1a j4a serv qerv fazyrv4 fazyrv8 femtorv_quark minimax picorv32 picorv32e leros}"; do for m in $n; do build "$m"; done; done
+for n in "${@:-j1a j1a_bram j4a serv qerv fazyrv4 fazyrv8 femtorv_quark minimax picorv32 picorv32e leros}"; do for m in $n; do build "$m"; done; done

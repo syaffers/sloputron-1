@@ -53,6 +53,9 @@ So medians differ by 0.5% and worst seeds by 3.5%. Rows made on a Mac are valid.
 that compare designs (Phase 3 and 7) use **linux-x86_64** numbers, which is what CI runs,
 so every design is compared on one platform.
 
+The linux-arm64 OSS CAD Suite build has no GHDL plugin, so the Leros baseline (VHDL) can't be
+rebuilt on linux-aarch64. Every other baseline builds there.
+
 ## Adding a design
 Add it to the registry at the top of the `Makefile`:
 ```
