@@ -7,10 +7,12 @@ updated from a claude.ai session, so say in your summary which docs changed.
 ## Goal and figure of merit
 Design an original 16-bit CPU that gets the most useful work per logic cell while fitting
 entirely in an iCE40HX1K-TQ144.
-- **Figure of merit:** benchmark iterations/s at measured Fmax ÷ logic cells used.
+- **Figure of merit:** benchmark iterations/s at measured Fmax ÷ logic cells used, per kernel,
+  combined by geometric mean. Barrels count N copies (N−1 with a UART thread). See D-002.
 - **Secondary:** code size; program memory is ≤ 8 KB.
-- **Benchmarks:** CRC-16, sort, 16×16 multiply, memcpy. Exact variants are still open
-  (see "Open questions").
+- **Benchmarks:** crc16 (CCITT-FALSE, 256 B, bitwise), insertion sort of 64 words, 64×
+  16×16→32 multiplies, and memcpy of 256 words. Exact inputs and check values are in
+  `docs/decisions/D-002-benchmarks.md`. Assembly only; no C compiler.
 
 ## Chip facts that drive every decision
 - 1,280 logic cells (LUT4 + DFF + carry). Everything counts: CPU, I/O, debug. Leave ~5%
@@ -104,12 +106,9 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
 | Barrel, 4–8 threads | **F4** — J4/Hive lineage | **F1** — Octavo/BRISKI/XMOS lineage |
 
 ## Open questions (owner decides; don't assume)
-- **Q1:** for barrel designs, does throughput count N benchmark copies on N threads?
-  Proposed: report both, rank on the aggregate.
-- **Q2:** a software-UART thread's slot counts as overhead (benchmarks get N−1 threads).
-- Benchmark variants: CRC-16 polynomial, sort algorithm and size, memcpy length, and whether
-  the 16×16 multiply returns a 32-bit result.
-- Is a C compiler ever a goal, or is assembly enough?
+- None open right now.
+- Settled in D-002: Q1 (barrels are ranked on N copies), Q2 (the UART thread's slot is
+  overhead), Q3 (geometric mean), the benchmark variants, and assembly only.
 
 ## Working on the board (local sessions)
 - The iCEstick is attached to the owner's machine: a Debian trixie PC or a MacBook Air M2.

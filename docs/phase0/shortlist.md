@@ -51,8 +51,8 @@ SWAR 2×8-bit add (T18), enumerated shifts (T17), compressed or variable-length 
 
 ## Open questions for the project owner
 
-- **Q1 — Figure of merit for multithreaded designs.** "Benchmark throughput (iterations/s)" can mean one benchmark instance (latency) or N independent instances on N threads (throughput). F1 and F4 are only competitive under the second reading, or if the benchmarks are split across threads by hand. Proposed default: **report both**, and rank on aggregate iterations/s with N copies, because that is what a barrel sells. The ranking flips depending on this choice, so it should be fixed before Phase 3.
-- **Q2 — Software UART.** If the UART is a thread (F1/F4), its slot is not available to benchmarks. Proposed: count the UART thread's slot as overhead, i.e. benchmarks get N−1 threads.
+- **Q1 — Figure of merit for multithreaded designs.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): barrels are ranked on N independent copies (N−1 with a UART thread); single-copy is reported for information.*
+- **Q2 — Software UART.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): the UART thread's slot is overhead, so benchmarks get N−1 threads.*
 
 ## Phase 2 entry list (from this decision)
 1. J1a with BRAM stacks (confirms the F2 estimate; quickest high-value experiment).
