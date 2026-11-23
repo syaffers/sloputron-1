@@ -38,6 +38,12 @@ blinky_SRC    := rtl/board/blinky.sv
 uart_echo_SRC := rtl/board/uart_echo.sv rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
 uart_echo_TB  := sim/uart_echo_tb.sv
 
+# ---- units: shared RTL with its own testbench, linted and simulated but not built ------
+UNITS := stack_bram
+
+stack_bram_SRC := rtl/lib/stack_bram.sv
+stack_bram_TB  := sim/stack_bram_tb.sv
+
 # GNU make 3.81 (macOS default) ignores .SHELLFLAGS, so recipes with pipes set pipefail
 # themselves; `timeout` is optional (coreutils `gtimeout` on macOS).
 TIMEOUT := $(shell command -v timeout || command -v gtimeout)
@@ -102,14 +108,14 @@ check: $(DESIGNS:%=$(B)/%/sweep.json)
 
 # ---- simulation and lint --------------------------------------------------------
 SIM_DESIGNS := $(foreach d,$(DESIGNS),$(if $($(d)_TB),$(d)))
-sim: $(SIM_DESIGNS:%=sim-%)
+sim: $(SIM_DESIGNS:%=sim-%) $(UNITS:%=sim-%)
 sim-%:
 	@mkdir -p $(B)/sim/$*
 	verilator $(VSIMFLAGS) --top-module $*_tb -Mdir $(B)/sim/$* $($*_TB) $($*_SRC) > $(B)/sim-$*.log 2>&1 \
 	  || { cat $(B)/sim-$*.log; exit 1; }
 	set -o pipefail; $(call RUN_TIMEOUT,300) $(B)/sim/$*/V$*_tb | grep -v '^- '
 
-lint: $(DESIGNS:%=lint-%)
+lint: $(DESIGNS:%=lint-%) $(UNITS:%=lint-%)
 lint-%:
 	verilator --lint-only $(VWARN) --top-module $* $($*_SRC)
 
