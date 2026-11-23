@@ -55,11 +55,12 @@ Makefile                  the flow: bits, prog, sim, lint, sweep, report, check 
 results.csv               one row per design per hardware commit (docs/process.md)
 board/icestick.pcf        every iCEstick pin, by port name (clk, led[4:0], uart_tx/rx, pmod[7:0], hdr_j1/j3)
 rtl/board/                top-level designs (top module name = design name)
-rtl/lib/                  shared RTL (uart_rx, uart_tx)
+rtl/lib/                  shared RTL (uart_rx, uart_tx, stack_bram)
 sim/                      self-checking Verilator testbenches (print PASS or $fatal)
 docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
+docs/phase2/              Phase 2 experiments (j1a_bram.md)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
@@ -79,7 +80,7 @@ make report NOTE="..."            # 16-seed sweep -> results.csv rows; required 
 make check                        # what CI runs
 cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fetch_baselines.sh)
 ```
-`baselines/build.sh` appends to `baselines/baselines.csv`. Use a scratch copy, or set `CSV`, for trial runs.
+`baselines/build.sh` appends to `baselines/baselines.csv`. Set `CSV=<scratch file>` for trial runs.
 
 ## Status
 - **Phase 0 (done):** literature survey, baselines (16 seeds), shortlist.
@@ -91,8 +92,11 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
   - Makefile flow, results.csv with a CI gate;
   - blinky (30 LC) and hardware UART echo (86 LC), simulation passing.
   - Waiting on the board run: `docs/phase1/bringup.md` checklist.
-- **Phase 2:** primitive cost table plus bare datapath skeletons of the finalists. The first
-  experiment is J1a with stacks in BRAM, to confirm the estimate of ~450–550 LC.
+- **Phase 2 (in progress):** primitive cost table plus bare datapath skeletons of the
+  finalists.
+  - Experiment 1 done: J1a with stacks in BRAM is 511 LC, 10 BRAM, 82.7 MHz median (was
+    1013 LC, 79.4 MHz). It uses `rtl/lib/stack_bram.sv`: falling-edge speculative write, no
+    bypass. See `docs/phase2/j1a_bram.md`.
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 
