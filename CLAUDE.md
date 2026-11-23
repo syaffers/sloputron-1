@@ -94,8 +94,11 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
   - Makefile flow, results.csv with a CI gate;
   - blinky (30 LC) and hardware UART echo (86 LC), simulation passing.
   - Board run passed 2026-11-23: blinky, UART echo PASS, 2.6 s flash (`docs/phase1/bringup.md`).
-- **Phase 2:** primitive cost table plus bare datapath skeletons of the finalists. The first
-  experiment is J1a with stacks in BRAM, to confirm the estimate of ~450–550 LC.
+- **Phase 2 (in progress):** primitive cost table plus bare datapath skeletons of the
+  finalists.
+  - Experiment 1 done: J1a with stacks in BRAM is 511 LC, 10 BRAM, 82.7 MHz median (was
+    1013 LC, 79.4 MHz). It uses `rtl/lib/stack_bram.sv`: falling-edge speculative write, no
+    bypass. See `docs/phase2/j1a_bram.md`.
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 
