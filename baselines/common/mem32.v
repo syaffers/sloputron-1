@@ -8,7 +8,9 @@ module mem32 #(parameter AW = 10, parameter INIT = "rand32.hex") (
   input  wire [31:0]   wdata,
   output reg  [31:0]   rdata
 );
-  reg [31:0] m [0:(1<<AW)-1];
+  // no_rw_check: a read during a write may return either value; without it Yosys adds
+  // logic to guarantee the old value (docs/phase2/primitives.md).
+  (* no_rw_check *) reg [31:0] m [0:(1<<AW)-1];
   initial $readmemh(INIT, m);
   always @(posedge clk) begin
     if (we[0]) m[addr][ 7: 0] <= wdata[ 7: 0];

@@ -2,11 +2,16 @@
 
 **Status:** proposed, 2026-11-22. **Inputs:** `baselines.md` (measured), `bibliography.md`, `tricks.md`.
 
+**Correction 2026-11-23:** the baseline cell counts quoted here were re-measured with a
+corrected harness (`baselines.md`). Every core except Leros dropped by 76–135 LC, and the
+figures below are updated. The conclusions and the shortlist are unchanged: J4a is still
+3.8× J1a, and serial RV32 cores still give 7–18 MIPS per 1000 LC against ~245 for Leros.
+
 ## The two axes that matter on this chip
 
 The baseline measurements reduce the nine candidate concepts to two independent questions:
 
-1. **Thread organisation: single thread, or barrel?** A barrel hides the synchronous BRAM read for free and removes forwarding and hazard logic, but each thread runs at Fmax/N. J4a (3494 LC on HX8K) against J1a (1013 LC) shows a barrel is only viable if per-thread state is in BRAM.
+1. **Thread organisation: single thread, or barrel?** A barrel hides the synchronous BRAM read for free and removes forwarding and hazard logic, but each thread runs at Fmax/N. J4a (3417 LC on HX8K) against J1a (898 LC) shows a barrel is only viable if per-thread state is in BRAM.
 2. **Operand model: stack, or register window/accumulator in BRAM?** Stacks give the densest code (J1, F18A) but the stacks must leave the FFs. Register windows give the best measured cells/throughput (Leros: 343 LC, 84 MHz, CPI 1) and make thread contexts free.
 
 So the shortlist is a 2 × 2, which lets Phase 3 separate the effect of threading from the effect of the operand model:
@@ -43,7 +48,7 @@ F2's ISA with per-thread stacks as regions of the same BRAMs (16 entries × N th
 | Concept | Reason (measured where possible) | What we keep |
 |---|---|---|
 | 3. Transport-triggered architecture | TTA removes decode, which is small in a 16-bit single-issue core: the whole Leros is 343 LC including decode. What TTA adds lands on both binding constraints. Every function-unit input becomes a socket mux (the result-mux cost, T21, now per FU), operand and trigger registers are added, and code grows. The published soft-core study reports extra multiplexing and +21–49% program size versus VLIW. TTA's real advantage, ILP through several buses, needs multi-ported register files, which here means more duplicated BRAMs taken from the 8 KB program store. | MAXQ-style memory-mapped "trigger" registers as the cheap custom-unit and I/O interface. |
-| 4. Bit/nibble-serial multicore | Measured: serial RV32 cores cost 456–851 LC for an estimated 3–9 MIPS, roughly 6–15 MIPS per 1000 LC against ~245 for Leros. The datapath shrinks, but per-core control, bus and sequencing overhead does not. Thread parallelism is cheaper through F1 (one datapath, contexts in BRAM) than through N cores. N cores also need N sets of BRAM ports, which fragments the 16 blocks and the 8 KB store, plus a network (Hoplite) or mailboxes. | Serial multiply step (T20) and serial shifts as ALU options. |
+| 4. Bit/nibble-serial multicore | Measured: serial RV32 cores cost 336–723 LC for an estimated 3–8 MIPS, roughly 7–18 MIPS per 1000 LC against ~245 for Leros. The datapath shrinks, but per-core control, bus and sequencing overhead does not. Thread parallelism is cheaper through F1 (one datapath, contexts in BRAM) than through N cores. N cores also need N sets of BRAM ports, which fragments the 16 blocks and the 8 KB store, plus a network (Hoplite) or mailboxes. | Serial multiply step (T20) and serial shifts as ALU options. |
 | 9. Triggered instructions | The trigger scheduler must evaluate every resident instruction's predicate each cycle, so its logic grows with program size. It suits PEs holding ≤ ~16 instructions in a spatial array; CRC-16, sort, multiply and memcpy plus a UART need hundreds of instructions in one core. | Event-wait slot scheduling in F1/F4 (T9). |
 
 ## Add-ons evaluated on every finalist (not concepts)

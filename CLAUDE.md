@@ -20,7 +20,7 @@ entirely in an iCE40HX1K-TQ144.
 - 16 × SB_RAM40_4K (256×16 natural). Each block has 1 read + 1 write port and a
   synchronous read. A 2-read-port register file = 2 blocks with duplicated writes.
 - **No LUT RAM on iCE40.** Any state outside BRAM costs one cell per bit. Measured: 512 of
-  J1a's 628 DFFs are its stacks, and the 4-thread J4a needs 3,494 cells. State belongs in
+  J1a's 583 DFFs are its stacks, and the 4-thread J4a needs 3,417 cells. State belongs in
   BRAM.
 - Mark BRAM memories `(* no_rw_check *)` unless the value of a same-address read during a
   write matters. Without it Yosys adds about 57 LC per read port to guarantee the old value
@@ -90,8 +90,9 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
 
 ## Status
 - **Phase 0 (done):** literature survey, baselines (16 seeds), shortlist.
-  - Best measured: Leros, 343 LC at 84 MHz.
-  - J1a: 1013 LC at 79 MHz.
+  - Best measured: Leros, 343 LC at 84 MHz (SERV is smaller at 336 LC, but ~36 CPI).
+  - J1a: 898 LC at 88 MHz (re-measured 2026-11-23 with `no_rw_check` on the harness RAM;
+    originally 1013 LC).
   - PicoRV32 small: does not fit.
   - See `docs/phase0/baselines.md`.
 - **Phase 1 (in progress):** done in the repo:
@@ -100,14 +101,15 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
   - Board run passed 2026-11-23: blinky, UART echo PASS, 2.6 s flash (`docs/phase1/bringup.md`).
 - **Phase 2 (in progress):** primitive cost table plus bare datapath skeletons of the
   finalists.
-  - Experiment 1 done: J1a with stacks in BRAM is 511 LC, 10 BRAM, 82.7 MHz median (was
-    1013 LC, 79.4 MHz). It uses `rtl/lib/stack_bram.sv`: falling-edge speculative write, no
+  - Experiment 1 done: J1a with stacks in BRAM is 422 LC, 10 BRAM, 87.0 MHz median (was
+    898 LC, 88.5 MHz). It uses `rtl/lib/stack_bram.sv`: falling-edge speculative write, no
     bypass. See `docs/phase2/j1a_bram.md`.
   - Primitive cost table done (`docs/phase2/primitives.md`, `prims/run.py`). BRAM register
     file is 1–2 LC, against 296 LC for 8×16 in FFs. A full barrel shifter is 134 LC,
     against 14 LC for shift-by-1. Mux cost is 1/3/6 LUTs per bit for 2:1/4:1/8:1.
-  - Found: the Phase 0 harness RAMs lack `no_rw_check`, which costs J1a 115 LC. The
-    baselines need re-measuring.
+  - The baselines were re-measured with `no_rw_check` on the harness RAMs: 76–135 LC less
+    per core. SERV now edges Leros on raw cells; the work-per-cell order is unchanged
+    (`docs/phase0/baselines.md`).
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 

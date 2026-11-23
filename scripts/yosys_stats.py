@@ -18,7 +18,7 @@ def stats(path):
     lut = c.get("SB_LUT4", 0)
     ff = sum(v for k, v in c.items() if k.startswith("SB_DFF"))
     carry = c.get("SB_CARRY", 0)
-    ram = c.get("SB_RAM40_4K", 0)
+    ram = sum(v for k, v in c.items() if k.startswith("SB_RAM40_4K"))   # incl. NR/NW/NRNW
     return lut, ff, carry, ram
 
 print("design,lut4,dff,carry,ram")

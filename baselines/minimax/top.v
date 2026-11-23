@@ -17,10 +17,11 @@ module top(input wire clk, input wire rst, output reg [4:0] led);
   wire [3:0]  we = wmask & {4{~is_io}};
 
   // data copy: 512 x 32
-  reg [31:0] dmem [0:511];
+  // no_rw_check on all three: see docs/phase2/primitives.md
+  (* no_rw_check *) reg [31:0] dmem [0:511];
   // instruction copy: two 512 x 16 halves (even/odd halfword)
-  reg [15:0] ilo [0:511];
-  reg [15:0] ihi [0:511];
+  (* no_rw_check *) reg [15:0] ilo [0:511];
+  (* no_rw_check *) reg [15:0] ihi [0:511];
   initial begin $readmemh("rand32.hex", dmem, 0, 511); $readmemh("rand16.hex", ilo, 0, 511); $readmemh("rand16.hex", ihi, 0, 511); end
 
   wire [8:0] wa = addr[10:2];
