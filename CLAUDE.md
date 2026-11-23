@@ -93,7 +93,7 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
 - **Phase 1 (in progress):** done in the repo:
   - Makefile flow, results.csv with a CI gate;
   - blinky (30 LC) and hardware UART echo (86 LC), simulation passing.
-  - Waiting on the board run: `docs/phase1/bringup.md` checklist.
+  - Board run passed 2026-11-23: blinky, UART echo PASS, 2.6 s flash (`docs/phase1/bringup.md`).
 - **Phase 2 (in progress):** primitive cost table plus bare datapath skeletons of the
   finalists.
   - Experiment 1 done: J1a with stacks in BRAM is 511 LC, 10 BRAM, 82.7 MHz median (was
@@ -115,8 +115,8 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
   overhead), Q3 (geometric mean), the benchmark variants, and assembly only.
 
 ## Working on the board (local sessions)
-- The iCEstick is attached to the owner's machine: a Debian trixie PC or a MacBook Air M2.
-  Cloud sessions cannot reach it.
+- The iCEstick is attached to the owner's machine: a Debian trixie board (aarch64) or a
+  MacBook Air M2. Cloud sessions cannot reach it.
 - First-time setup: `scripts/setup_debian.sh` (then log out and back in), or
   `scripts/setup_macos.sh`.
 - Flash with `make prog D=<design>`. On a Mac, `sudo` if the FTDI device can't be claimed.

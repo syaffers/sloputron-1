@@ -47,9 +47,11 @@ BRAM counts are identical, but nextpnr's placements differ slightly. Measured 20
 | Platform | Median Fmax | Worst Fmax |
 |---|---|---|
 | linux-x86_64 | 172.83 MHz | 158.28 MHz |
+| linux-aarch64 (Debian board machine) | 172.83 MHz | 158.28 MHz |
 | darwin-arm64 (Apple Silicon) | 172.00 MHz | 163.91 MHz |
 
-So medians differ by 0.5% and worst seeds by 3.5%. Rows made on a Mac are valid. Tables
+linux-aarch64 matches linux-x86_64 exactly (blinky too). Between Linux and macOS, medians
+differ by 0.5% and worst seeds by 3.5%. Rows made on a Mac are valid. Tables
 that compare designs (Phase 3 and 7) use **linux-x86_64** numbers, which is what CI runs,
 so every design is compared on one platform.
 
