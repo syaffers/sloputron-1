@@ -39,16 +39,16 @@ uart_echo_SRC := rtl/board/uart_echo.sv rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
 uart_echo_TB  := sim/uart_echo_tb.sv
 
 # ---- units: shared RTL with its own testbench, linted and simulated but not built ------
-UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4
+UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4 skel_f5
 
 stack_bram_SRC := rtl/lib/stack_bram.sv
 stack_bram_TB  := sim/stack_bram_tb.sv
 
 # Phase 2 datapath skeletons (skel/): the testbench runs a CRC program assembled by skel/asm.py
 SKEL_SRC := skel/rtl/skel_top.sv skel/rtl/skel_alu.sv skel/rtl/skel_f1.sv skel/rtl/skel_f2.sv \
-            skel/rtl/skel_f3.sv skel/rtl/skel_f4.sv rtl/lib/stack_bram.sv
-$(foreach f,1 2 3 4,$(eval skel_f$(f)_SRC := $(SKEL_SRC)) $(eval skel_f$(f)_TB := skel/sim/skel_tb.sv))
-$(foreach f,1 2 3 4,sim-skel_f$(f)): $(B)/skel/data.hex
+            skel/rtl/skel_f3.sv skel/rtl/skel_f4.sv skel/rtl/skel_f5.sv rtl/lib/stack_bram.sv
+$(foreach f,1 2 3 4 5,$(eval skel_f$(f)_SRC := $(SKEL_SRC)) $(eval skel_f$(f)_TB := skel/sim/skel_tb.sv))
+$(foreach f,1 2 3 4 5,sim-skel_f$(f)): $(B)/skel/data.hex
 $(B)/skel/data.hex: skel/asm.py
 	python3 skel/asm.py $(@D) > /dev/null
 

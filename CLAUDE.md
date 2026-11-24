@@ -69,7 +69,7 @@ docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skele
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
-skel/                     F1–F4 datapath skeletons: rtl/, sim/ (crc16 test), asm.py, run.py (16-seed sweep), skel.csv
+skel/                     F1–F5 datapath skeletons: rtl/, sim/ (crc16 + hazard tests), asm.py (+ reference interpreter), run.py (16-seed sweep), skel.csv
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
 scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
 scripts/uart_test.py      host-side loopback test against uart_echo
@@ -117,6 +117,11 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     at 96; F4 barrel stack 338 / 345 at 87. 4 → 8 threads costs 7–8 LC. The shared ALU
     (118 LUT) is the largest block and sets most critical paths. The cost table
     under-predicts whole cores by 21–44%.
+  - F5 control (D-003): F1's instructions on one thread. 329 LC at 86 MHz with one-cycle
+    stalls; forwarding (368 LC, 78 MHz) does not pay. On the crc test, two-operand
+    instructions give 1.24× F3's work per cell, and F1's threads add 1.42× on N copies or
+    1.06–1.22× on N−1. With a hardware UART counted (~80 LC, estimated), F1 leads F5 by
+    1.3–1.5×.
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 
@@ -128,7 +133,10 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
 | Barrel, 4–8 threads | **F4** — J4/Hive lineage | **F1** — Octavo/BRISKI/XMOS lineage |
 
 ## Open questions (owner decides; don't assume)
-- None open right now.
+- **Q4 — How is a single-thread core's UART counted?** A barrel pays for its UART with a
+  thread slot (D-002 Q2). Should a single-thread design's score include a hardware UART
+  (~80 LC, estimated)? This decides F1 against F5: F1 leads by 1.06–1.22× without the
+  UART cells and 1.3–1.5× with them (`docs/phase2/skeletons.md`, D-003).
 - Settled in D-002: Q1 (barrels are ranked on N copies), Q2 (the UART thread's slot is
   overhead), Q3 (geometric mean), the benchmark variants, and assembly only.
 
