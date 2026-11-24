@@ -60,14 +60,18 @@ CLAUDE.md                 this file
 Makefile                  the flow: bits, prog, sim, lint, sweep, report, check (`make help`)
 results.csv               one row per design per hardware commit (docs/process.md)
 board/icestick.pcf        every iCEstick pin, by port name (clk, led[4:0], uart_tx/rx, pmod[7:0], hdr_j1/j3)
-rtl/board/                top-level designs (top module name = design name)
+rtl/board/                top-level designs (top module name = design name); sloputron.sv = the CPU on the board
+rtl/core/                 the CPU core: f1_core.sv (D-006) and isa_pkg.sv (generated from isa/isa.toml)
 rtl/lib/                  shared RTL (uart_rx, uart_tx, stack_bram)
+isa/                      the ISA: isa.toml (single source), isa.py/asm.py (assembler), gen.py (spec doc + isa_pkg.sv), test_isa.py
+programs/                 assembly programs (demo.s runs on the board); make assembles them to build/programs/*.hex
+docs/isa/isa.md           the written ISA spec (generated; edit isa/isa.toml, then `make isa`)
 sim/                      self-checking Verilator testbenches (print PASS or $fatal)
 docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
-docs/phase3/              Phase 3: benchmarks.md (D-002 kernels on F1 and F5)
+docs/phase3/              Phase 3: benchmarks.md (D-002 kernels on F1 and F5), board.md (the CPU on the iCEstick)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
@@ -85,7 +89,8 @@ scripts/fetch_*.sh        pinned toolchain and baseline sources (into tools/ and
 ```
 make help                         # all targets
 make bits / make prog D=uart_echo # build / flash (board machine only)
-make sim lint                     # before every commit
+make sim lint                     # before every commit (sim also runs isa-test)
+make isa                          # after editing isa/isa.toml: regenerate docs/isa/isa.md + rtl/core/isa_pkg.sv
 make report NOTE="..."            # 16-seed sweep -> results.csv rows; required with any rtl/ or board/ change
 make check                        # what CI runs
 cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fetch_baselines.sh)
@@ -137,11 +142,19 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
 
     F1 with 4 threads leads by 1.31×. On whole-system cells the two are level (1.02×).
   - **D-006: the CPU is F1 with 4 threads** (barrel, two-operand registers, state in BRAM).
-  - Next, for F1 only:
-    - the ISA spec (TOML), from which the assembler rules and decode tables are generated;
-    - the C99 ISS, Verilator lockstep and formal checks;
-    - the core in `rtl/` with `results.csv` rows and a hardware PLL Fmax check;
-    - the UART choice: a hardware UART or a software thread.
+  - **ISA spec 0.3** (= v3) is written: `isa/isa.toml` generates `docs/isa/isa.md` and
+    `rtl/core/isa_pkg.sv` and drives the assembler `isa/asm.py`. Every canonical encoding
+    round-trips. customasm is not in the toolchain, so its rules are deferred.
+  - **D-007: hardware UART**, memory-mapped at 0xFFC–0xFFF beside the LEDs.
+  - **The CPU runs on the board** (design `sloputron`, `docs/phase3/board.md`):
+    - 461 LC, 15 BRAMs, 96.1 / 89.4 MHz (16 seeds); run at 12 MHz for now;
+    - the four-thread demo prints `crc16=29B1` and echoes 4,096 bytes with 0 errors;
+    - iCE40 BRAMs read wrong just after configuration, so the core holds for 1,024
+      clocks (19 LC).
+  - Next:
+    - a PLL Fmax sweep on the board;
+    - the C99 ISS and Verilator lockstep;
+    - the real ISA for F1 alone (open items in `docs/isa/isa.md`).
 
 Shortlist (D-001), a 2×2 of thread organisation × operand model. D-005 narrowed it to F1
 and F5 (F5 runs F1's ISA on a single thread, D-003). **D-006 chose F1 with 4 threads.**
