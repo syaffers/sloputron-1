@@ -40,8 +40,8 @@ only, so the per-cell figures are indicative.
 - F5 with stalls: 329 LC, 86.4 MHz, 358 k runs/s per 1000 LC.
 - **The instruction set:** F5 does 1.24× F3's work per cell.
 - **Threading, all N copies:** F1 does a further 1.42× F5 with 4 threads (1.39× with 8).
-- **Threading, one thread as the UART (N−1 copies):** F1 is only 1.06–1.22× F5.
-- Single-thread cores need a hardware UART, estimated at ~80 LC from the 86-LC UART echo
-  design. With it, F5 falls to about 288 k per 1000 LC, and F1 with N−1 copies leads by
-  1.3–1.5×.
+- How the UART is scored changed the threading figure. On N−1 copies, F1 was only
+  1.06–1.22× F5. With F5's ~80-LC hardware UART counted (an estimate), F1 led by 1.3–1.5×.
+  This was open question Q4. [D-004](D-004-uart-not-scored.md) settled it: the UART is not
+  scored, so the 1.42× above applies.
 - Forwarding does not pay: +39 LC and −10% clock speed buy 17% fewer cycles.

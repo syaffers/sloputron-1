@@ -8,7 +8,8 @@ updated from a claude.ai session, so say in your summary which docs changed.
 Design an original 16-bit CPU that gets the most useful work per logic cell while fitting
 entirely in an iCE40HX1K-TQ144.
 - **Figure of merit:** benchmark iterations/s at measured Fmax ÷ logic cells used, per kernel,
-  combined by geometric mean. Barrels count N copies (N−1 with a UART thread). See D-002.
+  combined by geometric mean. Barrels count N copies. The UART is not scored for any design.
+  See D-002 and D-004.
 - **Secondary:** code size; program memory is ≤ 8 KB.
 - **Benchmarks:** crc16 (CCITT-FALSE, 256 B, bitwise), insertion sort of 64 words, 64×
   16×16→32 multiplies, and memcpy of 256 words. Exact inputs and check values are in
@@ -119,9 +120,8 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     under-predicts whole cores by 21–44%.
   - F5 control (D-003): F1's instructions on one thread. 329 LC at 86 MHz with one-cycle
     stalls; forwarding (368 LC, 78 MHz) does not pay. On the crc test, two-operand
-    instructions give 1.24× F3's work per cell, and F1's threads add 1.42× on N copies or
-    1.06–1.22× on N−1. With a hardware UART counted (~80 LC, estimated), F1 leads F5 by
-    1.3–1.5×.
+    instructions give 1.24× F3's work per cell, and F1's threads add a further 1.42×
+    (N copies; the UART is not scored, D-004).
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 
@@ -133,12 +133,12 @@ Shortlist (D-001), a 2×2 of thread organisation × operand model:
 | Barrel, 4–8 threads | **F4** — J4/Hive lineage | **F1** — Octavo/BRISKI/XMOS lineage |
 
 ## Open questions (owner decides; don't assume)
-- **Q4 — How is a single-thread core's UART counted?** A barrel pays for its UART with a
-  thread slot (D-002 Q2). Should a single-thread design's score include a hardware UART
-  (~80 LC, estimated)? This decides F1 against F5: F1 leads by 1.06–1.22× without the
-  UART cells and 1.3–1.5× with them (`docs/phase2/skeletons.md`, D-003).
-- Settled in D-002: Q1 (barrels are ranked on N copies), Q2 (the UART thread's slot is
-  overhead), Q3 (geometric mean), the benchmark variants, and assembly only.
+- None open right now.
+- Settled in D-002: Q1 (barrels are ranked on N copies), Q3 (geometric mean), the benchmark
+  variants, and assembly only.
+- Settled in D-004: Q4. The UART is not scored for any design: a single-thread core's
+  hardware UART cells don't count, and barrels count all N copies. This replaces D-002's
+  Q2 rule (N−1 copies).
 
 ## Working on the board (local sessions)
 - The iCEstick is attached to the owner's machine: a Debian trixie board (aarch64) or a

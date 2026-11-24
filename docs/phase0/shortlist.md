@@ -56,8 +56,8 @@ SWAR 2×8-bit add (T18), enumerated shifts (T17), compressed or variable-length 
 
 ## Open questions for the project owner
 
-- **Q1 — Figure of merit for multithreaded designs.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): barrels are ranked on N independent copies (N−1 with a UART thread); single-copy is reported for information.*
-- **Q2 — Software UART.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): the UART thread's slot is overhead, so benchmarks get N−1 threads.*
+- **Q1 — Figure of merit for multithreaded designs.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): barrels are ranked on N independent copies; single-copy is reported for information. (The N−1 exception for a UART thread was removed by [D-004](../decisions/D-004-uart-not-scored.md).)*
+- **Q2 — Software UART.** *Resolved 2026-11-23 by [D-002](../decisions/D-002-benchmarks.md): the UART thread's slot is overhead, so benchmarks get N−1 threads. Superseded 2026-11-24 by [D-004](../decisions/D-004-uart-not-scored.md): the UART is not scored for any design, so barrels get all N threads.*
 
 ## Phase 2 entry list (from this decision)
 1. J1a with BRAM stacks (confirms the F2 estimate; quickest high-value experiment).

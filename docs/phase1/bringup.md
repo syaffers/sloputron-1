@@ -13,8 +13,9 @@ OSS CAD Suite 2026-11-01, `--freq 100`, seeds 1..16. Both designs run at the 12 
 oscillator; no PLL yet.
 
 The hardware UART here (`rtl/lib/uart_rx.sv`, `uart_tx.sv`) costs about 80 cells. It is a
-flow check, not a commitment: whether the CPU gets a hardware UART or a software-thread
-UART is open question Q2.
+flow check, not a commitment: the CPU may get a hardware UART or a software-thread UART.
+Either way, the UART is not part of the benchmark score (D-004). It still has to fit on
+the chip.
 
 Divisor: 12 MHz / 104 = 115,385 baud, +0.16% from nominal. The FT2232H's own 115200 setting
 is 3 MHz / 26 = 115,385 baud, so the two ends match exactly.

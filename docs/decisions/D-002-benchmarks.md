@@ -2,16 +2,18 @@
 
 **Status:** accepted, 2026-11-23 (owner). **Resolves:** Q1 and Q2 of D-001, the
 benchmark-variant question, the C-compiler question, and Q3. No questions left open.
+**Amended 2026-11-24 by [D-004](D-004-uart-not-scored.md):** the UART is left out of the
+score, so decision 1 (N−1 copies) no longer applies. Barrels are scored on all N copies.
 
 ## Decisions
 0. **Q1: barrels are scored on N copies.** A barrel design with N threads runs one
    independent copy of each kernel on every benchmark thread, and the score counts the
-   total iterations/s. Under Q2 that is N−1 copies when one thread is the UART. A
-   single-thread design runs one copy, so its score is the same under either rule. The
+   total iterations/s. (Under Q2 this was N−1 copies when one thread is the UART. D-004
+   removed that exception.) A single-thread design runs one copy, so its score is the same under either rule. The
    single-copy figure is reported too, but only for information. The owner chose this
    knowing it flatters barrels, because N fully independent copies are the best case for
    them.
-1. **Q2: the software UART costs one slot.** On a barrel design (F1/F4) with a UART thread,
+1. ~~**Q2: the software UART costs one slot.**~~ *Superseded by D-004.* On a barrel design (F1/F4) with a UART thread,
    benchmarks get N−1 threads. That slot pays for the ~80 cells a hardware UART would cost.
 2. **Assembly only.** No C compiler is planned. The ISA is shaped only by cells × speed ×
    code size. It does not need a frame pointer, a general register set, or anything else a
