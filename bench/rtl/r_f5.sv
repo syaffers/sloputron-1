@@ -1,12 +1,12 @@
-// F5 for the benchmarks: single-thread two-operand register machine running the v2 ISA
+// F5 for the benchmarks: single-thread two-operand register machine running the v3 ISA
 // (bench/rtl/r_f1.sv has the encoding; D-005). The datapath is skel/rtl/skel_f5.sv. Changes
 // from it:
-//   - skip compares two registers (unsigned < and >=, through the ALU's carry) and has
-//     8 conditions;
+//   - a carry flag C (a flip-flop), set by add and sub (and cmp) in E and tested by a skip
+//     in the next E, so it needs no forwarding;
+//   - a register-register operation can leave out its write (cmp);
+//   - skip has 8 conditions;
 //   - data addresses are DA bits wide;
 //   - r15 starts as 0 (the thread number, as in F1).
-// The hazard check treats every skip as reading rs. A skip that only tests rd encodes
-// rs = r0, so it stalls only after a write to r0.
 //
 // Pipeline, one instruction per cycle:
 //   D  instruction arrives -> register reads, decode, hazard check; a jmp is taken here
@@ -43,7 +43,8 @@ module r_f5 #(parameter bit FWD = 1, parameter int DA = 8) (
     logic [15:0] xd, xs;                            // register-file output registers
     logic [2:0]  e_op  = '0;
     logic [1:0]  e_src = '0;                        // s = 0 rs, 1 sext(i), 2 {i, rd[7:0]}, 3 PC+1
-    logic        e_we = 0, e_ld = 0, e_st = 0, e_sk = 0, e_jal = 0;
+    logic        e_we = 0, e_ld = 0, e_st = 0, e_sk = 0, e_jal = 0, e_setc = 0;
+    logic        cf = 0;                            // carry flag
     logic        fwd_d = 0, fwd_s = 0;              // take rd / rs from W instead of the RF
     logic [2:0]  e_cc  = '0;
     logic [3:0]  e_rd  = '0;
@@ -69,7 +70,7 @@ module r_f5 #(parameter bit FWD = 1, parameter int DA = 8) (
     wire        co;
     r_alu alu (.op(e_op), .x(xdf), .s, .y, .co);
     wire c;
-    r_cond cnd (.v(xdf), .co, .cc(e_cc), .t(c));
+    r_cond cnd (.v(xdf), .cf, .cc(e_cc), .t(c));
     wire kill = e_jal | (e_sk & c);                 // discard the instruction in D
 
     assign daddr = xsf[DA-1:0];
@@ -81,7 +82,7 @@ module r_f5 #(parameter bit FWD = 1, parameter int DA = 8) (
     wire [3:0] cls   = insn[15:12];
     wire       jmp   = insn[15:13] == 3'b111;
     wire       use_d = !(cls == 4'd9 || cls == 4'd13 || jmp);            // all but ld, jal, jmp
-    wire       use_s = insn[15] && !(cls == 4'd11 || jmp);   // alu-reg, ld, st, skip, jal
+    wire       use_s = insn[15] && !(cls == 4'd11 || cls == 4'd12 || jmp); // alu-reg, ld, st, jal
     wire       hit_d = use_d && e_rd == insn[11:8];
     wire       hit_s = use_s && e_rd == insn[7:4];
     wire       stall = dv && !kill && e_we && (FWD ? e_ld : 1'b1) && (hit_d || hit_s);
@@ -94,9 +95,11 @@ module r_f5 #(parameter bit FWD = 1, parameter int DA = 8) (
         pc    <= iaddr;
         xd    <= rfa[insn[11:8]];
         xs    <= rfb[insn[7:4]];
-        e_op  <= !insn[15] ? insn[14:12] : cls == 4'd8 ? insn[2:0] : cls == 4'd12 ? 3'd1 : 3'd5;
-        e_src <= !insn[15] ? 2'd1 : (cls == 4'd8 || cls == 4'd12) ? 2'd0 : cls == 4'd11 ? 2'd2 : 2'd3;
-        e_we  <= v & (!insn[15] | cls == 4'd8 | cls == 4'd9 | cls == 4'd11 | cls == 4'd13);
+        e_op  <= !insn[15] ? insn[14:12] : cls == 4'd8 ? insn[2:0] : 3'd5;
+        e_src <= !insn[15] ? 2'd1 : cls == 4'd8 ? 2'd0 : cls == 4'd11 ? 2'd2 : 2'd3;
+        e_we  <= v & (!insn[15] | (cls == 4'd8 & !insn[3]) | cls == 4'd9 | cls == 4'd11 | cls == 4'd13);
+        e_setc <= v & ((!insn[15] & insn[14:13] == 2'd0) | (cls == 4'd8 & insn[2:1] == 2'd0));
+        if (e_setc) cf <= co;
         e_ld  <= v & cls == 4'd9;
         e_st  <= v & cls == 4'd10;
         e_sk  <= v & cls == 4'd12;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The four D-002 benchmark kernels for the two-operand register ISA v2 (F1 and F5; D-005).
+"""The four D-002 benchmark kernels for the two-operand register ISA v3 (F1 and F5; D-005).
 
 usage: bench/kernels.py [OUTDIR]     (default build/bench)
 
@@ -17,7 +17,7 @@ the D-002 check values, which come from a separate Python model.
 The ISA encoding is documented in bench/rtl/r_f1.sv. Conventions used by the programs:
   r15   thread number (set at configuration: 0..N-1; F5 has thread 0 only)
   r14   base of this thread's region, (thread + 1) * 256
-  r0    never written, so a skip that tests only rd encodes rs = r0
+  C     carry flag: add sets it on carry out, sub/cmp when rd >= rs unsigned; skip cc/cs
 Data memory (D-005): words 0x000-0x0FF hold the shared read-only input. Thread t owns
 0x100*(t+1) .. +0xFF. A store to 0xFFF (all ones) signals that the thread has finished.
 Code is straightforward loops, not unrolled. Loads are scheduled at least two
@@ -26,7 +26,7 @@ instructions before their use, which costs F1 nothing and saves F5 its load stal
 import os, sys
 
 ALU = dict(add=0, sub=1, and_=2, or_=3, xor=4, pass_=5, shl=6, shr=7)
-CC = dict(al=0, z=1, nz=2, neg=3, nneg=4, ltu=5, geu=6, odd=7)
+CC = dict(al=0, z=1, nz=2, neg=3, nneg=4, cc=5, cs=6, odd=7)     # cc/cs: carry flag clear/set
 DA, DEPTH, ROM_WORDS = 12, 4096, 2048
 DONE = DEPTH - 1
 THREADS = (1, 4, 8)
@@ -74,12 +74,13 @@ class Asm:
         self.code.append((ALU[op] << 12) | (d << 8) | (i & 0xFF))
 
     def alur(self, op, d, s=0):    self.code.append(0x8000 | (d << 8) | (s << 4) | ALU[op])
+    def cmp(self, d, s):           self.code.append(0x8008 | (d << 8) | (s << 4) | ALU["sub"])  # C = rd >= rs
     def li(self, d, i):            self.alui("pass_", d, i)
     def mov(self, d, s):           self.alur("pass_", d, s)
     def ld(self, d, s):            self.code.append(0x9000 | (d << 8) | (s << 4))      # rd <- D[rs]
     def st(self, d, s):            self.code.append(0xA000 | (d << 8) | (s << 4))      # D[rs] <- rd
     def ldhi(self, d, i):          self.code.append(0xB000 | (d << 8) | (i & 0xFF))
-    def skip(self, cc, d, s=0):    self.code.append(0xC000 | (d << 8) | (s << 4) | CC[cc])
+    def skip(self, cc, d=0):       self.code.append(0xC000 | (d << 8) | CC[cc])
     def jmp(self, l):              self.code.append(lambda L: 0xE000 | L[l])
 
     def prologue(self):            # r14 = (r15 + 1) * 256
@@ -138,9 +139,11 @@ def k_sort():
     a.mov(4, 1); a.alui("add", 4, -1)            # r4 = q - 1
     a.label("inner")
     a.ld(5, 4)                                   # a[j] (read even when j < 0; then unused)
-    a.skip("geu", 4, 14)                         # j >= 0: keep going
+    a.cmp(4, 14)
+    a.skip("cs")                                 # j >= 0: keep going
     a.jmp("place")
-    a.skip("ltu", 2, 5)                          # key < a[j]: shift a[j] up
+    a.cmp(2, 5)
+    a.skip("cc")                                 # key < a[j]: shift a[j] up
     a.jmp("place")
     a.st(5, 3)
     a.mov(3, 4)
@@ -149,7 +152,8 @@ def k_sort():
     a.label("place")
     a.st(2, 3)
     a.alui("add", 1, 1)
-    a.skip("geu", 1, 13)                         # p == end: done
+    a.cmp(1, 13)
+    a.skip("cs")                                 # p == end: done
     a.jmp("outer")
     a.finish(1)
     return a.words()
@@ -179,8 +183,8 @@ def k_mul16():
     a.alur("shl", 5)
     a.skip("neg", 3)                             # top bit of b set: add a
     a.jmp("noadd")
-    a.alur("add", 5, 2)
-    a.skip("geu", 5, 2)                          # carry out of lo when lo < a
+    a.alur("add", 5, 2)                          # sets C on carry out of lo
+    a.skip("cc")
     a.alui("add", 4, 1)
     a.label("noadd")
     a.alur("shl", 3)
@@ -219,7 +223,7 @@ def k_memcpy():
 
 def k_hazard():
     """Not a benchmark: a fixed pseudo-random sequence that packs back-to-back register
-    dependencies (both operands, including compare-skips), loads used at once, address
+    dependencies (both operands, compares), carry-flag skips, loads used at once, address
     changes right before a load or store, and skips. Every result is folded into r5, and
     stores go to the thread's own region, so the final memory shows any stale operand."""
     import random
@@ -229,8 +233,14 @@ def k_hazard():
     V, ACC = (1, 2, 3, 4), 5
     ops = list(ALU)
     fold = lambda r: a.alur(rng.choice(("add", "xor")), ACC, r)
+    a.mov(6, 15)                                 # r6 = thread * 0x0909: values differ per thread
+    for _ in range(3):
+        a.alur("shl", 6)
+    a.alur("add", 6, 15)
+    a.mov(7, 6); a.ldhi(7, 0); a.alur("shl", 7); a.alur("add", 6, 7)
     for r in V:
         a.li(r, rng.randrange(256)); a.ldhi(r, rng.randrange(256))
+        a.alur(rng.choice(("add", "xor", "sub")), r, 6)
     a.li(ACC, 0)
     for k in range(8):                           # distinct words at base .. base+7
         a.mov(8, 14); a.alui("add", 8, k)
@@ -238,7 +248,7 @@ def k_hazard():
         a.st(6, 8)
     a.mov(9, 14)
     for _ in range(150):
-        k, d, s = rng.randrange(10), rng.choice(V), rng.choice(V)
+        k, d, s = rng.randrange(11), rng.choice(V), rng.choice(V)
         if k <= 1:   a.alur(rng.choice(ops), d, s); fold(d)
         elif k == 2: a.alui(rng.choice(ops), d, rng.randrange(256)); fold(d)
         elif k == 3:                             # new address, used at once
@@ -247,10 +257,16 @@ def k_hazard():
         elif k == 4: a.st(d, rng.choice((8, 9)))
         elif k == 5: a.ld(d, rng.choice((8, 9))); fold(d)                       # load-use, rs
         elif k == 6: a.ld(d, rng.choice((8, 9))); a.alur(rng.choice(ops), d, s); fold(d)
-        elif k == 7: a.skip(rng.choice(("z", "nz", "neg", "nneg", "odd")), d); a.alui("add", ACC, 1 + rng.randrange(100))
-        else:                                    # compare-skip right after a write to rs or rd
+        elif k == 7:                             # the skipped add must not set C
+            a.skip(rng.choice(("z", "nz", "neg", "nneg", "odd")), d); a.alui("add", ACC, 1 + rng.randrange(100))
+            a.skip(rng.choice(("cc", "cs"))); a.alui("xor", ACC, 1 + rng.randrange(100))
+        elif k <= 9:                             # compare right after a write, then skip on C
             a.alur(rng.choice(ops), s if k == 8 else d, rng.choice(V))
-            a.skip(rng.choice(("ltu", "geu")), d, s); a.alui("add", ACC, 1 + rng.randrange(100))
+            a.cmp(d, s); a.skip(rng.choice(("cc", "cs"))); a.alui("add", ACC, 1 + rng.randrange(100))
+        else:                                    # add/sub sets C, other ops keep it
+            a.alur(rng.choice(("add", "sub")), d, s); fold(d)
+            a.alur(rng.choice(("and_", "or_", "xor", "shl")), s, d)
+            a.skip(rng.choice(("cc", "cs"))); a.alui("xor", ACC, 1 + rng.randrange(100))
     a.st(ACC, 14)
     a.finish(ACC)
     return a.words()
@@ -279,18 +295,28 @@ def alu(op, x, s):
     return [x + s, x - s, x & s, x | s, x ^ s, s, x << 1, x >> 1][op] & 0xFFFF
 
 
+def carry(op, x, s, c):
+    """C after an ALU operation: add -> carry out, sub -> no borrow (x >= s), else unchanged."""
+    return (x + s > 0xFFFF) if op == 0 else (x >= s) if op == 1 else c
+
+
 def run(words, mem, thread, max_steps=2_000_000):
     """Run one thread to its store at DONE. Returns (instructions, taken skips)."""
-    R, pc, skips = [0] * 16, 0, 0
+    R, pc, skips, C = [0] * 16, 0, 0, 0
     R[15] = thread
     sext = lambda i: (i - 256 if i & 0x80 else i) & 0xFFFF
     for n in range(1, max_steps + 1):
         w = words[pc]
         cls, d, s, nxt = w >> 12, (w >> 8) & 15, (w >> 4) & 15, (pc + 1) & 0x7FF
         if not w & 0x8000:
-            R[d] = alu(cls & 7, R[d], sext(w & 0xFF))
+            op, x, y = cls & 7, R[d], sext(w & 0xFF)
+            R[d] = alu(op, x, y)
+            C = carry(op, x, y, C)
         elif cls == 8:
-            R[d] = alu(w & 7, R[d], R[s])
+            op, x, y = w & 7, R[d], R[s]
+            if not w & 8:
+                R[d] = alu(op, x, y)
+            C = carry(op, x, y, C)
         elif cls == 9:
             R[d] = mem[R[s] % DEPTH]
         elif cls == 10:
@@ -300,8 +326,8 @@ def run(words, mem, thread, max_steps=2_000_000):
         elif cls == 11:
             R[d] = ((w & 0xFF) << 8) | (R[d] & 0xFF)
         elif cls == 12:
-            v, r = R[d], R[s]
-            if [True, v == 0, v != 0, v >= 0x8000, v < 0x8000, v < r, v >= r, v & 1][w & 7]:
+            v = R[d]
+            if [True, v == 0, v != 0, v >= 0x8000, v < 0x8000, not C, C, v & 1][w & 7]:
                 nxt, skips = (nxt + 1) & 0x7FF, skips + 1
         elif cls == 13:
             nxt, R[d] = R[s] & 0x7FF, pc + 1

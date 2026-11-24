@@ -128,13 +128,15 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
   thread), which share a two-operand register ISA (v2).
   - All four D-002 kernels run on both, checked against a reference interpreter
     (`docs/phase3/benchmarks.md`, `bench/`).
-  - Geometric mean, iterations/s per 1000 core cells (16 seeds): F1 4 threads 33,264
-    (330 LC, 74 MHz); F1 8 threads 32,610; F5 23,566 (336 LC, 66 MHz). F1 leads by 1.41×.
-  - Caveats:
-    - The new compare-and-skip is on both cores' critical paths (−15% F1, −23% F5 Fmax).
-      Taking it off is the next experiment.
-    - On whole-system cells (N-copy data memory logic) the lead is only 1.10×.
-  - Still to do: commit to one concept.
+  - ISA v3 adds a carry flag and `cmp`. v2 compared in one cycle through the ALU carry,
+    which cost both cores 15–23% of their Fmax.
+  - Geometric mean, iterations/s per 1000 core cells (D-005: core cells only; 16 seeds):
+    - F1 4 threads: 37,364 (336 LC, 90.0 MHz);
+    - F1 8 threads: 35,974;
+    - F5 stalls: 28,526 (338 LC, 84.1 MHz).
+
+    F1 with 4 threads leads by 1.31×. On whole-system cells the two are level (1.02×).
+  - Still to do: commit to one concept (owner decision).
 
 Shortlist (D-001), a 2×2 of thread organisation × operand model. Since D-005 only F1 and
 F5 remain. F5 runs F1's two-operand register ISA on a single thread (D-003).
