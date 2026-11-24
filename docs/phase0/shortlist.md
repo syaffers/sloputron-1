@@ -62,4 +62,4 @@ SWAR 2×8-bit add (T18), enumerated shifts (T17), compressed or variable-length 
 ## Phase 2 entry list (from this decision)
 1. J1a with BRAM stacks (confirms the F2 estimate; quickest high-value experiment).
 2. Primitive cost table: 16-bit adder, N:1 mux per bit (N = 2…8), BRAM RF 1R/2R, shifter variants, thread-PC storage in FF vs BRAM, decode in LUT vs BRAM.
-3. Bare datapath skeletons for F1–F4, 16 seeds each.
+3. Bare datapath skeletons for F1–F4, 16 seeds each. *Done 2026-11-24: `docs/phase2/skeletons.md`.*
