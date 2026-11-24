@@ -6,7 +6,7 @@ Each trick lists where it comes from, what it buys on the HX1K, and how Phase 2 
 
 | # | Trick | Source | Expected effect on HX1K | Phase 2 measurement |
 |---|---|---|---|---|
-| T1 | **Stacks in BRAM, top-of-stack (and maybe NOS) in FFs.** Stack pointer indexes a 256×16 block; push/pop are writes/reads with the pointer pre-computed one cycle early. | J1 lineage, Koopman, F18A | J1a spends 512 of 628 DFFs on stacks. Est. J1-class core drops from 1013 to ~450–550 LC. | J1a with `stack2` replaced by BRAM stacks; LC + Fmax over 16 seeds. |
+| T1 | **Stacks in BRAM, top-of-stack (and maybe NOS) in FFs.** Stack pointer indexes a 256×16 block; push/pop are writes/reads with the pointer pre-computed one cycle early. | J1 lineage, Koopman, F18A | J1a spends 512 of 628 DFFs on stacks. Est. J1-class core drops from 1013 to ~450–550 LC. **Measured (Phase 2):** 898 → 422 LC with the corrected harness (`docs/phase2/j1a_bram.md`). | J1a with `stack2` replaced by BRAM stacks; LC + Fmax over 16 seeds. |
 | T2 | **Register file = window into BRAM** (`addr = {base, r}`). Context switch = change `base`. | TMS9900, Leros, Octavo, Transputer Wptr | Thread contexts cost 0 LC. 16 regs × 16 threads = exactly one 256×16 block per read port. | BRAM RF with 1 vs 2 read ports (1 vs 2 BRAMs, duplicated writes). |
 | T3 | **Per-thread PCs in a BRAM** read one stage ahead in a barrel. | Octavo, BRISKI | N PCs cost 0 LC instead of 13·N. | Thread-PC storage: FF vs BRAM. |
 | T4 | **Duplicate BRAMs instead of multi-port logic.** 2R1W = two copies written together. | LaForest TRETS 2014 | 0 LC per extra read port. Costs 1 BRAM each, and BRAMs are also the program store (16 total). | Count BRAMs left for program + data per design. |

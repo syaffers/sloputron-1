@@ -2,7 +2,8 @@
 
 **Question:** Phase 0 found that 512 of J1a's 628 flip-flops are its two stacks. If those
 stacks move into BRAM, does J1a land near the D-001 estimate of ~450–550 LC?
-**Answer:** yes, at **511 LC**, and Fmax rises slightly.
+**Answer:** yes. It is **422 LC** with the corrected harness (511 LC with the original Phase 0
+harness), at the same Fmax.
 
 ## Results
 OSS CAD Suite 2026-11-01 (Yosys 0.70+286, nextpnr 0.11.1-85-ga2c64799), `--freq 100`,
@@ -10,20 +11,27 @@ seeds 1..16, uniform Phase 0 harness (`baselines/j1a/top.v`: 4 KB RAM, LED port)
 Measured on linux-aarch64. That platform reproduces the linux-x86_64 numbers exactly for
 J1a, blinky and uart_echo.
 
-| | J1a (Phase 0) | J1a, BRAM stacks | Change |
+The harness RAM now has `(* no_rw_check *)` (see `docs/phase2/primitives.md`). Without it,
+Yosys spends about 90–115 cells on harness logic that has nothing to do with the core. Both
+harnesses are shown:
+
+| | J1a | J1a, BRAM stacks | Change |
 |---|---:|---:|---:|
-| Logic cells (`ICESTORM_LC`) | 1013 | **511** | −50% |
+| **Corrected harness:** logic cells | 898 | **422** | −53% |
+| Fmax median / worst / best (MHz) | 88.49 / 82.19 / 90.93 | 87.01 / 82.13 / 91.63 | −2% |
+| *Original harness:* logic cells | 1013 | 511 | −50% |
+| Fmax median / worst / best (MHz) | 79.40 / 75.01 / 84.05 | 82.68 / 77.71 / 86.08 | +4% |
 | BRAMs | 8 | 10 | +2 |
-| Flip-flops (Yosys) | 628 | 125 | −503 |
-| LUT4s (Yosys) | 916 | 432 | −484 |
-| Fmax median / worst / best (MHz) | 79.40 / 75.01 / 84.05 | **82.68 / 77.71 / 86.08** | +4% |
+| Flip-flops (Yosys, corrected harness) | 583 | 80 | −503 |
+| LUT4s (Yosys, corrected harness) | 844 | 386 | −458 |
 
 The flip-flops fall by exactly the 512 stack bits, less the 9 pointer bits added (4 + 5).
-The LUTs fall just as far, because each shift-register bit also needed its own push/pop
+The LUTs fall almost as far, because each shift-register bit also needed its own push/pop
 mux. The two extra BRAMs leave 6 of 16 free.
 
-With the same per-instruction behaviour at half the cells, J1a's figure of merit roughly
-doubles before any change to its ISA.
+With the same per-instruction behaviour in less than half the cells, J1a's figure of merit
+roughly doubles before any change to its ISA. Estimated, at J1a's assumed CPI of 1.1: ~188
+MIPS per 1000 LC, against ~245 for Leros (`docs/phase0/baselines.md`).
 
 ## How it works (`rtl/lib/stack_bram.sv`)
 A drop-in replacement for swapforth's `stack2`, with the same ports and `DEPTH` parameter.
@@ -62,7 +70,8 @@ the test does detect the hazard the falling-edge write avoids.
   but needs a change to `j1.v`. This experiment kept J1 unmodified.
 
 ## Consequences for the shortlist
-- F2's area estimate holds. The single-thread stack machine starts from about 500 LC
-  rather than 1000, which leaves roughly 700 LC of budget for ISA improvements.
+- F2's area estimate holds, and is beaten. The single-thread stack machine starts from
+  about 420 LC rather than 900, which leaves roughly 800 LC of the 1216-LC budget for ISA
+  improvements.
 - `stack_bram` is reusable. F4 (barrel stack machine) needs per-thread stacks, which are
   the same structure with the thread number added to the BRAM address.

@@ -7,7 +7,9 @@ module top(input wire clk, input wire rst, output reg [4:0] led);
   wire [12:0] code_addr;
   reg  [15:0] insn;
 
-  reg [15:0] ram [0:2047];
+  // no_rw_check: a same-address read during a write may return either value, as in any
+  // real CPU memory. Without it Yosys adds ~57 LC per read port (docs/phase2/primitives.md).
+  (* no_rw_check *) reg [15:0] ram [0:2047];
   initial $readmemh("rand16.hex", ram);
   always @(posedge clk) begin
     if (mem_wr) ram[mem_addr[11:1]] <= dout;

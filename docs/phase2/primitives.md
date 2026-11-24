@@ -91,8 +91,8 @@ rows (Yosys SAT miter over all inputs). A deliberately broken add/sub fails the 
 - **`(* no_rw_check *)` on BRAM memories.** Without it, Yosys guarantees "a read during a
   write to the same address returns the old value" by building extra logic: about 57 cells
   per read port. A CPU usually doesn't care what that read returns. The Phase 0 baseline
-  harness has the same issue: J1a's harness RAM costs 115 cells this way (1013 → 898 LC with
-  the attribute). Re-measuring the baselines is a separate step.
+  harness had the same issue: J1a's harness RAM cost 115 cells this way (1013 → 898 LC with
+  the attribute). The baselines have been re-measured with the fix (`docs/phase0/baselines.md`).
 - **Yosys moves small flip-flop register files into BRAM by itself** when the read output is
   registered (`rf16x16_2r_ff` came out as 2 BRAMs). `(* ram_style = "logic" *)` forces the
   flip-flop version for comparison.

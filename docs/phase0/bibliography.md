@@ -54,7 +54,7 @@ Format per entry: **idea** · **measured cost (as published, other toolchains; n
     *Idea:* an 18-bit dual-stack core. Each word holds four 5-bit instruction slots (slot 3 restricted), stacks are 8 deep, there are 64 words each of RAM and ROM, and blocking neighbour ports can be executed from. Branch targets are formed from the remaining slot bits. *Relevance:* **H** for encoding. Slot-packing several stack ops per fetch halves fetches and code size for stack code, and is what makes 16-bit stack words competitive.
 
 16. **Koopman — Stack Computers: the new wave** (1989); **Bowman — J1: a small Forth CPU core for FPGAs** (EuroForth 2010). https://www.excamera.com/files/j1.pdf
-    *Idea:* J1 is a 16-bit, 3-format dual-stack machine. The ALU instruction has independent fields for T←, N→T, R→PC and stack deltas, so several Forth words fuse into one instruction. *Cost:* measured here: J1a 1013 LC, half of it stack FFs. *Relevance:* **H**. This is the baseline to beat, and its weak point (FF stacks) is known.
+    *Idea:* J1 is a 16-bit, 3-format dual-stack machine. The ALU instruction has independent fields for T←, N→T, R→PC and stack deltas, so several Forth words fuse into one instruction. *Cost:* measured here: J1a 898 LC, more than half of it stack FFs (Phase 2: 422 LC with the stacks in BRAM). *Relevance:* **H**. This is the baseline to beat, and its weak point (FF stacks) is known.
 
 17. **Schoeberl — Leros: a tiny microcontroller for FPGAs** (FPL 2011); **Schoeberl & Petersen — Leros: the return of the accumulator machine** (ARCS 2019); **Schoeberl — Lipsi** (ARCS 2018).
     *Idea:* a 16-bit pipelined accumulator machine. The "registers" are an on-chip memory, instructions are 16-bit with an 8-bit register/immediate field, and all are single-cycle. *Cost:* measured here: 343 LC, 84 MHz. *Relevance:* **H**. It is the strongest measured baseline and proves the BRAM-register-window idea on small FPGAs.
@@ -77,10 +77,10 @@ Format per entry: **idea** · **measured cost (as published, other toolchains; n
 ## C. Serial and tiny RISC-V cores (32-bit baselines)
 
 23. **Kindgren — SERV / QERV** (github olofk/serv; QERV press release 2023).
-    *Idea:* bit-serial (QERV: 4-bit) RV32I with the register file in RAM. *Cost:* measured here: SERV 456 LC / 115 MHz; QERV 584 LC / 95 MHz. *Relevance:* **M**. They give the floor for "32-bit ISA on this chip". Throughput per cell is poor because of CPI.
+    *Idea:* bit-serial (QERV: 4-bit) RV32I with the register file in RAM. *Cost:* measured here: SERV 336 LC / 113 MHz; QERV 463 LC / 92 MHz. *Relevance:* **M**. They give the floor for "32-bit ISA on this chip". Throughput per cell is poor because of CPI.
 
 24. **Kissich & Baunach — FazyRV** (CF 2024, doi:10.1145/3649153.3649195).
-    *Idea:* RV32I with 1/2/4/8-bit chunks chosen at synthesis time; iCE40 is a primary target. *Cost:* measured here: FazyRV-4 729 LC / 49 MHz; FazyRV-8 851 LC / 42 MHz (shared-bus harness). *Relevance:* **M**. The area/CPI curve between serial and parallel is shallow on this chip.
+    *Idea:* RV32I with 1/2/4/8-bit chunks chosen at synthesis time; iCE40 is a primary target. *Cost:* measured here: FazyRV-4 594 LC / 50 MHz; FazyRV-8 723 LC / 41 MHz (shared-bus harness). *Relevance:* **M**. The area/CPI curve between serial and parallel is shallow on this chip.
 
 25. **Ewert et al. — SAILOR** (arXiv:2602.24166, 2026).
     *Idea:* RV32I(+crypto) with 1–32-bit datapath widths. *Cost:* ASIC only (FreePDK45): 12.9–13.3 kGE; SERV 12.0, FazyRV-1 9.6, PicoRV32 15.3 kGE. *Relevance:* **L/M**. In ASIC terms the area is nearly flat from 1-bit to 16-bit, which supports a parallel 16-bit datapath.
@@ -89,13 +89,13 @@ Format per entry: **idea** · **measured cost (as published, other toolchains; n
     *Relevance:* **L**. It is more evidence that serial width scales area roughly linearly while cycles scale inversely.
 
 27. **Smecher — Minimax: a compressed-first, microcoded RISC-V CPU** (2022–).
-    *Idea:* RVC executes natively at CPI 1, and RV32I is emulated by microcode stored in ordinary program memory. *Cost:* measured here: 1253 LC (98% of the chip), 60 MHz. *Relevance:* **M**. "Microcode in program memory" is a BRAM-microcode variant that costs no extra BRAM. The 16-bit encoding is the right size for an 8 KB program store.
+    *Idea:* RVC executes natively at CPI 1, and RV32I is emulated by microcode stored in ordinary program memory. *Cost:* measured here: 1177 LC (92% of the chip), 58 MHz. *Relevance:* **M**. "Microcode in program memory" is a BRAM-microcode variant that costs no extra BRAM. The 16-bit encoding is the right size for an 8 KB program store.
 
 28. **Levy — FemtoRV32-Quark** (learn-fpga).
-    *Relevance:* **L/M**. It is a reference for a simple multi-cycle RV32I on the IceStick: measured 960 LC, 57 MHz.
+    *Relevance:* **L/M**. It is a reference for a simple multi-cycle RV32I on the IceStick: measured 879 LC, 56 MHz.
 
 29. **Wolf — PicoRV32 (small config).**
-    *Relevance:* **L**. It does not fit the HX1K (1517 LC on HX8K). It is useful only as a sanity check.
+    *Relevance:* **L**. It does not fit the HX1K (1426 LC on HX8K). It is useful only as a sanity check.
 
 30. **Smith — Glacial** (2018 RISC-V SoftCPU contest).
     *Idea:* RV32I on an 8-bit datapath, with microcode, scratchpad and program in one 8-bit RAM. *Relevance:* **M**. It is the extreme of "microcode in BRAM instead of LUTs".

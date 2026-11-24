@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Synthesize and place & route every baseline with the pinned toolchain.
 # usage: ./build.sh [name ...]      (default: all)
-# env:   SEEDS=16 FREQ=100 EXT=<repo>/ext TOOLS=<repo>/tools/oss-cad-suite
+# env:   SEEDS=16 FREQ=100 JOBS=<parallel seeds> CSV=<out> EXT=<repo>/ext TOOLS=<repo>/tools/oss-cad-suite
 # setup: scripts/fetch_toolchain.sh && scripts/fetch_baselines.sh
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -21,7 +21,7 @@ synth_v() {   # name top-param-override files...
 }
 
 pnr() { local pcf=$C/icestick.pcf; [[ " $* " == *" hx8k "* ]] && pcf=none
-  python3 "$HERE/../scripts/pnr_sweep.py" "$1" "$B/$1.json" "$pcf" --seeds "$SEEDS" --freq "$FREQ" --csv "$CSV" "${@:2}"; }
+  python3 "$HERE/../scripts/pnr_sweep.py" "$1" "$B/$1.json" "$pcf" --seeds "$SEEDS" --freq "$FREQ" --csv "$CSV" ${JOBS:+--jobs "$JOBS"} "${@:2}"; }
 
 S=$EXT/serv; F=$EXT/learn-fpga/FemtoRV/RTL/PROCESSOR
 SERV_FILES="$HERE/serv/top.v $C/mem32.v $S/servile/*.v $S/rtl/serv_*.v"
