@@ -66,3 +66,6 @@ SWAR 2×8-bit add (T18), enumerated shifts (T17), compressed or variable-length 
 4. *Added by [D-003](../decisions/D-003-f5-control.md):* F5, F1's instruction set on a single
    thread, as a control that separates F1's instruction-set advantage from its threading.
    *Done 2026-11-24 (same document).*
+
+**Narrowed 2026-11-24 by [D-005](../decisions/D-005-f1-f5-benchmarks.md):** only F1 and F5
+go on to the Phase 3 benchmarks. F2, F3 and F4 are dropped on the Phase 2 measurements.
