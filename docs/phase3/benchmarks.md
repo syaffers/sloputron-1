@@ -126,8 +126,7 @@ chip: at most 14 of 16 BRAMs and 484 of 1,280 cells.
   - 13 broken variants of the v3 cores all fail.
 
 ## Next
-- **Commit to a concept.** On these numbers it is F1 with 4 threads. That needs the owner's
-  decision record.
+- **Decided:** [D-006](../decisions/D-006-commit-f1.md) commits to F1 with 4 threads.
 - **Unroll the inner loops** (crc16's and mul16's bit loops). This trades code size for
   speed, and D-002 tracks code size as the secondary metric. It helps both cores about
   equally.
