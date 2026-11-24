@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Assemble the Phase 2 skeleton test programs (CRC-16/CCITT-FALSE of "123456789" = 0x29B1)
 for the three provisional instruction sets: stack (F2 and F4), accumulator (F3) and
-two-operand registers (F1). The encodings are documented in skel/rtl/skel_f{1,2,3}.sv.
+two-operand registers (F1 and F5). The encodings are documented in skel/rtl/skel_f{1,2,3}.sv.
 
-usage: skel/asm.py OUTDIR   -> prog_stack.hex, prog_acc.hex, prog_reg.hex, data.hex
+usage: skel/asm.py OUTDIR   -> prog_stack.hex, prog_acc.hex, prog_reg.hex, prog_reg_hz.hex, data.hex
 
 Each program reads the nine bytes from data words 0..8 (one byte per word, already shifted
 into the high byte, so `crc ^= word` is the CCITT byte step), runs the bitwise CRC through a
 subroutine (call/return is exercised) and stores the result to data address 0xFF.
+
+prog_reg_hz.hex is a hazard test for the register ISA: a fixed pseudo-random straight-line
+sequence that packs back-to-back register dependencies, load-use pairs, address changes
+right before loads and stores, and skips. Every result is folded into a checksum register
+at once, so a stale operand anywhere changes the final value. A reference interpreter (run_reg) computes its
+result, and a final correction makes a correct core store 0x29B1, like the crc programs.
 """
 import os, sys
 
@@ -200,6 +206,80 @@ def prog_reg():
     return a.words()
 
 
+def alu_ref(op, x, s):
+    return [x + s, x - s, x & s, x | s, x ^ s, s, x << 1, x >> 1][op] & 0xFFFF
+
+
+def run_reg(words, data, max_steps=100_000):
+    """Reference interpreter for the two-operand register ISA. Returns (first word stored to
+    0xFF, instructions executed up to and including that store)."""
+    R, M, pc = [0] * 16, list(data) + [0] * (256 - len(data)), 0
+    sext = lambda i: (i - 256 if i & 0x80 else i) & 0xFFFF
+    for n in range(1, max_steps + 1):
+        w = words[pc]
+        cls, d, s, nxt = w >> 12, (w >> 8) & 15, (w >> 4) & 15, (pc + 1) & 0x7FF
+        if not w & 0x8000:
+            R[d] = alu_ref(cls & 7, R[d], sext(w & 0xFF))
+        elif cls == 8:
+            R[d] = alu_ref(w & 7, R[d], R[s])
+        elif cls == 9:
+            R[d] = M[R[s] & 0xFF]
+        elif cls == 10:
+            M[R[s] & 0xFF] = R[d]
+            if R[s] & 0xFF == 0xFF:
+                return R[d], n
+        elif cls == 11:
+            R[d] = ((w & 0xFF) << 8) | (R[d] & 0xFF)
+        elif cls == 12:
+            v = R[d]
+            if [True, v == 0, v != 0, bool(v & 0x8000)][w & 3]:
+                nxt = (nxt + 1) & 0x7FF
+        elif cls == 13:
+            nxt, R[d] = R[s] & 0x7FF, pc + 1
+        else:
+            nxt = w & 0x7FF
+        pc = nxt
+    raise RuntimeError("no store to 0xFF")
+
+
+def prog_reg_hz(fix=0):
+    import random
+    rng = random.Random(7)
+    ops = list(ALU)
+    a = []
+    alui = lambda op, d, i: a.append((ALU[op] << 12) | (d << 8) | (i & 0xFF))
+    alur = lambda op, d, s: a.append(0x8000 | (d << 8) | (s << 4) | ALU[op])
+    ld = lambda d, s: a.append(0x9000 | (d << 8) | (s << 4))
+    st = lambda d, s: a.append(0xA000 | (d << 8) | (s << 4))
+    ldhi = lambda d, i: a.append(0xB000 | (d << 8) | (i & 0xFF))
+    skip = lambda cc, d: a.append(0xC000 | (d << 8) | cc)
+    V, ACC = (1, 2, 3, 4), 5                      # value registers; r5 checksum; r8, r9 addresses
+    fold = lambda r: alur(rng.choice(("add", "xor")), ACC, r)   # every result reaches r5
+    for r in V:
+        alui("pass_", r, rng.randrange(256)); ldhi(r, rng.randrange(256))
+    alui("pass_", ACC, 0)
+    for k in range(8):                            # distinct words at 0x20..0x27
+        alui("pass_", 8, 0x20 + k); alui("pass_", 6, rng.randrange(256)); ldhi(6, 0x10 * k + 1)
+        st(6, 8)
+    alui("pass_", 9, 0x21)
+    for _ in range(90):
+        k, d, s = rng.randrange(8), rng.choice(V), rng.choice(V)
+        if k <= 1:   alur(rng.choice(ops), d, s); fold(d)
+        elif k == 2: alui(rng.choice(ops), d, rng.randrange(256)); fold(d)
+        elif k == 3:                              # new address, used at once
+            r = rng.choice((8, 9)); alui("pass_", r, 0x20 + rng.randrange(8))
+            (ld(d, r), fold(d)) if rng.randrange(2) else st(d, r)
+        elif k == 4: st(d, rng.choice((8, 9)))
+        elif k == 5: ld(d, rng.choice((8, 9))); fold(d)          # load-use, rs side
+        elif k == 6: ld(d, rng.choice((8, 9))); alur(rng.choice(ops), d, s); fold(d)  # rd side
+        else:        skip(rng.randrange(4), d); alui("add", ACC, 1 + rng.randrange(100))
+    alur("xor", ACC, 1)
+    alui("pass_", 2, fix & 0xFF); ldhi(2, fix >> 8); alur("xor", ACC, 2)
+    alui("pass_", 8, 0xFF); st(ACC, 8)
+    a.append(0xE000 | len(a))                     # halt
+    return a
+
+
 def write_hex(path, words, n):
     with open(path, "w") as f:
         for i in range(n):
@@ -210,11 +290,19 @@ def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "build/skel"
     os.makedirs(out, exist_ok=True)
     assert crc_ref(MSG) == CHECK
+    data = [b << 8 for b in MSG]
+    assert run_reg(prog_reg(), data)[0] == CHECK
+    v0, _ = run_reg(prog_reg_hz(), data)
+    hz = prog_reg_hz(v0 ^ CHECK)
+    assert run_reg(hz, data)[0] == CHECK
     for name, words in (("stack", prog_stack()), ("acc", prog_acc()), ("reg", prog_reg())):
         assert len(words) < 128, (name, len(words))     # labels must fit 8-bit immediates
         write_hex(os.path.join(out, f"prog_{name}.hex"), words, ROM_WORDS)
         print(f"prog_{name}.hex: {len(words)} words")
-    write_hex(os.path.join(out, "data.hex"), [b << 8 for b in MSG], 256)
+    write_hex(os.path.join(out, "prog_reg_hz.hex"), hz, ROM_WORDS)
+    print(f"prog_reg_hz.hex: {len(hz)} words, {run_reg(hz, data)[1]} instructions")
+    print(f"prog_reg: {run_reg(prog_reg(), data)[1]} instructions to the result")
+    write_hex(os.path.join(out, "data.hex"), data, 256)
 
 
 if __name__ == "__main__":

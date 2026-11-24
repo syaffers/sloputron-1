@@ -4,11 +4,13 @@
 //   output port   a store to data address 0xFF also latches the low 5 bits onto the LEDs
 // The memories are filled from hex files: random words for synthesis (so nothing can be
 // constant-folded), a test program and its data in simulation.
-// CORE: 1 = F1 barrel registers, 2 = F2 stack, 3 = F3 accumulator, 4 = F4 barrel stack.
+// CORE: 1 = F1 barrel registers, 2 = F2 stack, 3 = F3 accumulator, 4 = F4 barrel stack,
+//       5 = F5 single-thread registers (FWD selects forwarding; D-003).
 `default_nettype none
 module skel_top #(
     parameter int    CORE = 2,
     parameter int    N    = 4,               // threads (F1, F4)
+    parameter bit    FWD  = 1,               // forwarding (F5)
     parameter string ROM  = "skel_rom.hex",
     parameter string RAM  = "skel_ram.hex"
 ) (
@@ -37,6 +39,7 @@ module skel_top #(
         1: begin : g_f1 skel_f1 #(.N(N)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd); end
         2: begin : g_f2 skel_f2          cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd); end
         3: begin : g_f3 skel_f3          cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd); end
+        5: begin : g_f5 skel_f5 #(.FWD(FWD)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd); end
         default: begin : g_f4 skel_f4 #(.N(N)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd); end
     endcase endgenerate
 endmodule
