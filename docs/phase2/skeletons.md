@@ -109,23 +109,27 @@ measured core is far more accurate than pricing it from scratch.**
 These figures use provisional instruction sets and hand-written code on a 9-byte input, not
 the D-002 benchmarks. They show the shape of the trade-off, not the final ranking.
 
-| Skeleton | Cycles per crc run (one copy) | Instructions per run | Runs/s (all copies) | Runs/s per 1000 cells | With one thread as UART (D-002) |
-|---|---:|---:|---:|---:|---:|
-| F1, 4 threads | 2,202 | 550 | 158.5 k | 508 k | 381 k |
-| F1, 8 threads | 4,402 | 550 | 159.4 k | 498 k | 436 k |
-| F2 | 1,303 | 1,302 | 63.6 k | 177 k | — |
-| F3 | 1,138 | 814 (+324 branch bubbles) | 84.3 k | 289 k | — |
-| F4, 4 threads | 5,209 | 1,302 | 66.4 k | 196 k | 147 k |
-| F4, 8 threads | 10,417 | 1,302 | 66.6 k | 193 k | 169 k |
-| F5, stalls | 734 | 550 (+41 skips, 18 calls, 123 stalls) | 117.8 k | 358 k | — |
-| F5, forwarding | 611 | 550 (+41 skips, 18 calls) | 127.8 k | 347 k | — |
+| Skeleton | Cycles per crc run (one copy) | Instructions per run | Runs/s (all copies) | Runs/s per 1000 cells |
+|---|---:|---:|---:|---:|
+| F1, 4 threads | 2,202 | 550 | 158.5 k | 508 k |
+| F1, 8 threads | 4,402 | 550 | 159.4 k | 498 k |
+| F2 | 1,303 | 1,302 | 63.6 k | 177 k |
+| F3 | 1,138 | 814 (+324 branch bubbles) | 84.3 k | 289 k |
+| F4, 4 threads | 5,209 | 1,302 | 66.4 k | 196 k |
+| F4, 8 threads | 10,417 | 1,302 | 66.6 k | 193 k |
+| F5, stalls | 734 | 550 (+41 skips, 18 calls, 123 stalls) | 117.8 k | 358 k |
+| F5, forwarding | 611 | 550 (+41 skips, 18 calls) | 127.8 k | 347 k |
+
+The UART is left out of the score for every design ([D-004](../decisions/D-004-uart-not-scored.md)),
+so barrels count all N copies. An earlier version of this table also scored barrels on N−1
+copies, under the D-002 rule that D-004 replaced.
 
 How to read it:
 - A barrel issues one instruction per cycle in total, shared round-robin. One copy runs N
   times slower, but N copies run at once. D-002 ranks on N copies.
 - **F2 and F4 run the same program**, so they isolate the effect of threading. F4 costs
   14–21 cells *less* than F2 and runs at about the same clock, so the barrel's N copies
-  cost nothing extra in cells. A barrel only pays when one thread is the UART (N−1 copies).
+  cost nothing extra in cells.
 - **F1 against F3** mixes threading with a different instruction set. Most of F1's lead
   comes from needing 550 instructions per run against F3's 814 and F2/F4's 1,302. Two
   register operands do in one instruction what the accumulator does in two or three.
@@ -140,17 +144,14 @@ its two causes:
 | Step | Work per cell | What changed |
 |---|---:|---|
 | F3 → F5 (stalls) | 289 k → 358 k, **1.24×** | accumulator → two-operand registers, both single-thread |
-| F5 → F1, all N copies | 358 k → 508 k (4 threads), **1.42×**; 498 k (8), 1.39× | threads added, same instructions |
-| F5 → F1, one thread as the UART | 358 k → 381–436 k, **1.06–1.22×** | as above, N−1 copies (D-002) |
+| F5 → F1 | 358 k → 508 k (4 threads), **1.42×**; 498 k (8), 1.39× | threads added, same instructions |
 
 - **Both causes are real.** Two-operand instructions beat the accumulator by 1.24× and the
-  single-thread stack machine (F2) by 2×. Threads add more on top, but how much depends on
-  how the barrel is credited.
-- **The UART changes the picture.** A barrel can run the UART as a thread. A single-thread
-  core needs a hardware UART, about 80 LC (an estimate, from the 86-LC UART echo design;
-  not measured inside a core). Counting it, F5 drops to about 288 k per 1000 LC, and F1 with
-  N−1 copies leads by 1.3–1.5×. The D-002 rules don't say yet how a single-thread core's
-  UART is counted. The final comparison needs that settled.
+  single-thread stack machine (F2) by 2×. Threads add a further 1.4×.
+- **The UART is not scored** ([D-004](../decisions/D-004-uart-not-scored.md)). Before that
+  decision the split depended on it. If a single-thread core's ~80-LC hardware UART had
+  counted, F1 would lead F5 by 1.3–1.5×. If barrels had been scored on N−1 copies, the
+  lead would be only 1.06–1.22×.
 - **One program runs 3× faster on F5.** One crc copy takes 8.5 µs on F5 against 25 µs on
   F1 with 4 threads. D-002 ranks on N copies, so this is information only. It matters for
   anything that cannot be split into independent copies.
@@ -198,12 +199,12 @@ its two causes:
    is: F3 7 KB (14 blocks), F2 6.5 KB, F5 6.5 KB, F1 6 KB, F4 5 KB.
 
 ## For Phase 3
-- **F1 looks strongest** on this first test: 1.7× F3's runs per 1000 cells, or 1.3–1.5×
-  with one thread as the UART. F5 splits that lead: the instruction set gives 1.24× and
-  threading the rest (1.42× on all copies, 1.06–1.22× on N−1).
+- **F1 looks strongest** on this first test: 1.7× F3's runs per 1000 cells. F5 splits that
+  lead: the instruction set gives 1.24× and threading a further 1.42×.
 - **The two-operand register model wins over both stacks and the accumulator**, single
-  thread or barrel. The open choice is F1 (barrel) against F5 (single thread). It turns on
-  how D-002 counts a single-thread core's UART, and on the other three benchmarks.
+  thread or barrel. The open choice is F1 (barrel) against F5 (single thread). On crc, F1
+  leads by 1.4×. The other three benchmarks will decide, especially sort and memcpy,
+  where F5 stalls on every load that is used straight away.
 - **The ALU is common to all four, so optimise it once.** Reasonable targets are 96 LUTs
   and a shorter carry path.
 - **Measure an extra pipeline stage in F1/F4** (decode separate from execute) to see how
