@@ -67,9 +67,11 @@ docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
+docs/phase3/              Phase 3: benchmarks.md (D-002 kernels on F1 and F5)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
+bench/                    Phase 3 benchmark cores (F1, F5; ISA v2): rtl/, sim/, kernels.py (assembler, kernels, reference interpreter), run.py (16-seed sweep -> bench.csv), score.py (figure of merit -> score.csv)
 skel/                     F1–F5 datapath skeletons: rtl/, sim/ (crc16 + hazard tests), asm.py (+ reference interpreter), run.py (16-seed sweep), skel.csv
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
 scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
@@ -122,10 +124,20 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     stalls; forwarding (368 LC, 78 MHz) does not pay. On the crc test, two-operand
     instructions give 1.24× F3's work per cell, and F1's threads add a further 1.42×
     (N copies; the UART is not scored, D-004).
-- **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
-  one concept.
+- **Phase 3 (in progress):** D-005 narrowed the shortlist to F1 (barrel) and F5 (single
+  thread), which share a two-operand register ISA (v2).
+  - All four D-002 kernels run on both, checked against a reference interpreter
+    (`docs/phase3/benchmarks.md`, `bench/`).
+  - Geometric mean, iterations/s per 1000 core cells (16 seeds): F1 4 threads 33,264
+    (330 LC, 74 MHz); F1 8 threads 32,610; F5 23,566 (336 LC, 66 MHz). F1 leads by 1.41×.
+  - Caveats:
+    - The new compare-and-skip is on both cores' critical paths (−15% F1, −23% F5 Fmax).
+      Taking it off is the next experiment.
+    - On whole-system cells (N-copy data memory logic) the lead is only 1.10×.
+  - Still to do: commit to one concept.
 
-Shortlist (D-001), a 2×2 of thread organisation × operand model:
+Shortlist (D-001), a 2×2 of thread organisation × operand model. Since D-005 only F1 and
+F5 remain. F5 runs F1's two-operand register ISA on a single thread (D-003).
 
 | | Stack (stacks in BRAM) | Register window / accumulator (RF in BRAM) |
 |---|---|---|
