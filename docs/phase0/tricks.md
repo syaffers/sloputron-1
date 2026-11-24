@@ -17,7 +17,7 @@ Each trick lists where it comes from, what it buys on the HX1K, and how Phase 2 
 
 | # | Trick | Source | Effect | Measure |
 |---|---|---|---|---|
-| T7 | **Barrel interleaving: thread count = longest loop** (fetch→RF read→ALU→write-back). No forwarding, no interlocks, no branch penalty. | Octavo, BRISKI, XMOS | Every synchronous BRAM read hides in a stage that already exists. The result mux and hazard logic disappear. | Barrel skeleton at N = 2, 4, 8. |
+| T7 | **Barrel interleaving: thread count = longest loop** (fetch→RF read→ALU→write-back). No forwarding, no interlocks, no branch penalty. | Octavo, BRISKI, XMOS | Every synchronous BRAM read hides in a stage that already exists. The result mux and hazard logic disappear. **Measured (Phase 2):** both barrel skeletons need N ≥ 4, and 4 → 8 threads costs 7–8 LC (`docs/phase2/skeletons.md`). | Barrel skeleton at N = 4, 8. |
 | T8 | **No-interlock pipelines with software NOPs / delay slots** (single-thread variant). | Langhammer et al. 2026 | Removes hazard detection; costs code size. | Hazard logic LC vs NOP count in benchmarks. |
 | T9 | **Event-wait slots.** A thread blocked on a flag or channel is skipped by the scheduler or burns its slot as a NOP. | XMOS events, triggered instructions | Software peripherals with zero-latency wake-up; no interrupt controller. | A few LC in the slot scheduler. |
 | T10 | **Software peripherals.** UART, SPI and PWM run as threads with cycle-exact slots, and pins are mapped into register space. | XMOS, PRU (R30/R31), RP2040 PIO | Removes UART hardware (est. 40–80 LC). The I/O budget becomes software. | UART thread at 115200 baud: instructions per bit vs slot rate. |

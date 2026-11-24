@@ -65,10 +65,11 @@ sim/                      self-checking Verilator testbenches (print PASS or $fa
 docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
-docs/phase2/              Phase 2 experiments (j1a_bram.md)
+docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
+skel/                     F1–F4 datapath skeletons: rtl/, sim/ (crc16 test), asm.py, run.py (16-seed sweep), skel.csv
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
 scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
 scripts/uart_test.py      host-side loopback test against uart_echo
@@ -110,6 +111,12 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
   - The baselines were re-measured with `no_rw_check` on the harness RAMs: 76–135 LC less
     per core. SERV now edges Leros on raw cells; the work-per-cell order is unchanged
     (`docs/phase0/baselines.md`).
+  - Skeletons of F1–F4 done (`docs/phase2/skeletons.md`, `skel/`). They share an ALU and a
+    harness, and each passes a crc16 test. Cells / Fmax median (16 seeds): F1 barrel
+    registers 312 (4 threads) / 320 (8) at 87 MHz; F2 stack 359 at 83; F3 accumulator 292
+    at 96; F4 barrel stack 338 / 345 at 87. 4 → 8 threads costs 7–8 LC. The shared ALU
+    (118 LUT) is the largest block and sets most critical paths. The cost table
+    under-predicts whole cores by 21–44%.
 - **Phase 3:** an ISA, simulator and assembler per finalist; benchmark cycle counts; commit to
   one concept.
 
