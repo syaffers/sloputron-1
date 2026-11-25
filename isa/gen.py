@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate the written spec and the SystemVerilog constants from isa/isa.toml.
 
-usage: isa/gen.py            writes docs/isa/isa.md and rtl/core/isa_pkg.sv
-       isa/gen.py --check    exits 1 if either file is out of date (used by `make isa-test`)
+usage: isa/gen.py            writes docs/isa/isa.md, rtl/core/isa_pkg.sv and iss/isa_gen.h
+       isa/gen.py --check    exits 1 if any of them is out of date (used by `make isa-test`)
 """
 import os, sys
 
@@ -143,10 +143,45 @@ def systemverilog(spec):
     return "\n".join(out)
 
 
+def c_header(spec):
+    """Decode constants for the C ISS (iss/), the same values as isa_pkg.sv."""
+    i, out = spec.isa, []
+    w = out.append
+    w(f"/* {i['name']} ISA {i['version']} constants. Generated from isa/isa.toml by isa/gen.py;")
+    w("   do not edit. Decode an instruction class with (insn & FMT_x_MASK) == FMT_x_MATCH. */")
+    w("#ifndef SLP_ISA_GEN_H")
+    w("#define SLP_ISA_GEN_H")
+    w("")
+    w(f'#define ISA_VERSION "{i["version"]}"')
+    w(f"#define PC_BITS   {i['pc_bits']}")
+    w(f"#define DATA_BITS {i['data_bits']}")
+    w(f"#define THREADS   {i['threads']}")
+    w(f"#define REGISTERS {i['registers']}")
+    w("")
+    for f in spec.formats.values():
+        n = f.name.upper()
+        w(f"#define FMT_{n}_MASK  0x{f.mask:04x}u")
+        w(f"#define FMT_{n}_MATCH 0x{f.match:04x}u")
+    w("")
+    for a in spec.raw["alu"]:
+        w(f"#define ALU_{a['name'].upper()} {a['code']}")
+    w("")
+    for c in spec.raw["cond"]:
+        w(f"#define CC_{c['name'].upper()} {c['code']}")
+    w("")
+    for m in spec.raw["memory"]["io"]:
+        w(f"#define IO_{m['name']} 0x{m['addr']:03x}u")
+    w("")
+    w("#endif")
+    w("")
+    return "\n".join(out)
+
+
 def main():
     spec = Spec()
     targets = {os.path.join(ROOT, "docs", "isa", "isa.md"): markdown(spec),
-               os.path.join(ROOT, "rtl", "core", "isa_pkg.sv"): systemverilog(spec)}
+               os.path.join(ROOT, "rtl", "core", "isa_pkg.sv"): systemverilog(spec),
+               os.path.join(ROOT, "iss", "isa_gen.h"): c_header(spec)}
     stale = []
     for path, text in targets.items():
         old = open(path).read() if os.path.exists(path) else None

@@ -144,6 +144,5 @@ isa/asm.py programs/demo.s -o build/programs/demo.hex --list build/programs/demo
 On Linux the port is /dev/ttyUSB1. Until the `dialout` and `plugdev` groups are active
 in your session, run the commands through `sg dialout -c "..."` or `sg plugdev -c "..."`.
 
-## Next
-- **The C99 ISS and Verilator lockstep** (D-006). `isa/iss.py` is a Python start: it
-  models the barrel, RAM, UART and LEDs, and it runs the demo and the stress program.
+## Verification
+The C ISS and the lockstep check of this design against it are in `verification.md`.

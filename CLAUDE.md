@@ -49,10 +49,11 @@ entirely in an iCE40HX1K-TQ144.
   Verilator 5. Install with `scripts/fetch_toolchain.sh` (or put the same release on PATH).
 - HDL: synthesizable SystemVerilog through the Yosys **slang** front end. Instantiate iCE40
   primitives (SB_RAM40_4K, SB_CARRY, SB_LUT4) directly where inference wastes cells.
-- The ISA is one TOML spec (`isa/isa.toml`) that generates the SV decode package and the
-  docs and drives the assembler (customasm dropped, D-008). Planned: C decode tables with a
-  C99 cycle-counting ISS; Verilator lockstep with an RVFI-style retirement port; SymbiYosys
-  formal checks; icebram + iceprog for program loading.
+- The ISA is one TOML spec (`isa/isa.toml`). It generates the SV decode package, the C
+  decode header and the docs, and it drives the assembler (customasm dropped, D-008).
+- The C99 cycle-counting ISS (`iss/`) checks the RTL in Verilator lockstep through the
+  RVFI-style retirement port of `f1_core` (`docs/phase3/verification.md`).
+- Planned: SymbiYosys formal checks; icebram + iceprog for program loading.
 - nextpnr flags: `--hx1k --package tq144 --freq 100 --timing-allow-fail`, seeds 1..16.
 
 ## Layout
@@ -64,15 +65,16 @@ board/icestick.pcf        every iCEstick pin, by port name (clk, led[4:0], uart_
 rtl/board/                top-level designs (top module name = design name); sloputron.sv = the CPU on the board
 rtl/core/                 the CPU core: f1_core.sv (D-006) and isa_pkg.sv (generated from isa/isa.toml)
 rtl/lib/                  shared RTL (uart_rx, uart_tx, stack_bram)
-isa/                      the ISA: isa.toml (single source), isa.py/asm.py (assembler), gen.py (spec doc + isa_pkg.sv), iss.py (Python ISS of the board), test_isa.py
+isa/                      the ISA: isa.toml (single source), isa.py/asm.py (assembler), gen.py (spec doc + isa_pkg.sv + iss/isa_gen.h), iss.py (Python ISS of the board), test_isa.py
+iss/                      C99 ISS (iss.c, slp-iss CLI in main.c), DPI glue for lockstep (dpi.c), random_rom.py, test_iss.py
 programs/                 assembly programs: demo.s (banner + echo), stress.s (clock-sweep test); make assembles them to build/programs/*.hex
 docs/isa/isa.md           the written ISA spec (generated; edit isa/isa.toml, then `make isa`)
-sim/                      self-checking Verilator testbenches (print PASS or $fatal)
+sim/                      self-checking Verilator testbenches (print PASS or $fatal); lockstep_tb.sv = CPU vs ISS
 docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
-docs/phase3/              Phase 3: benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv
+docs/phase3/              Phase 3: benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
@@ -92,7 +94,8 @@ scripts/fetch_*.sh        pinned toolchain and baseline sources (into tools/ and
 make help                         # all targets
 make bits / make prog D=uart_echo # build / flash (board machine only)
 make sim lint                     # before every commit (sim also runs isa-test)
-make isa                          # after editing isa/isa.toml: regenerate docs/isa/isa.md + rtl/core/isa_pkg.sv
+make isa                          # after editing isa/isa.toml: regenerate docs/isa/isa.md, rtl/core/isa_pkg.sv, iss/isa_gen.h
+make iss                          # C ISS -> build/iss/slp-iss (make sim runs iss-test and sim-lockstep)
 make report NOTE="..."            # 16-seed sweep -> results.csv rows; required with any rtl/ or board/ change
 make check                        # what CI runs
 cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fetch_baselines.sh)
@@ -162,8 +165,11 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     shifts set C) + a 4-bit load/store offset. That is 1.23× the work per clock per cell:
     354 LC, geometric mean 48,768 (0.3: 38,295 in the same run). No 12-bit PC, multiply
     step or shift-by-N. The board runs 1.0.
-  - Next:
-    - the C99 ISS and Verilator lockstep (`isa/iss.py` is a Python start).
+  - **C99 ISS and lockstep** (`docs/phase3/verification.md`):
+    - `iss/` simulates the board clock-exactly, at about 18M instructions/s;
+    - `make sim-lockstep` checks every instruction the RTL finishes against it, on the
+      demo, the stress test and 8 random ROMs (2M instructions, 0 mismatches);
+    - all 9 planted core bugs were caught, 3 of them only by the random ROMs.
 
 Shortlist (D-001), a 2×2 of thread organisation × operand model. D-005 narrowed it to F1
 and F5 (F5 runs F1's ISA on a single thread, D-003). **D-006 chose F1 with 4 threads.**

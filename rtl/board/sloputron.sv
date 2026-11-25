@@ -60,7 +60,12 @@ module sloputron #(
     wire                  dre, dwe;
     logic [15:0]          drd;
 
-    f1_core #(.STARTUP(STARTUP)) cpu (.clk(cclk), .run, .iaddr, .insn, .daddr, .dre, .drd, .dwe, .dwa, .dwd);
+    /* verilator lint_off PINCONNECTEMPTY */           // the retirement port is for simulation
+    f1_core #(.STARTUP(STARTUP)) cpu (.clk(cclk), .run, .iaddr, .insn, .daddr, .dre, .drd, .dwe, .dwa, .dwd,
+        .rvfi_valid(), .rvfi_thread(), .rvfi_pc(), .rvfi_insn(), .rvfi_pc_next(), .rvfi_c(),
+        .rvfi_rd_we(), .rvfi_rd(), .rvfi_rd_wdata(), .rvfi_mem_re(), .rvfi_mem_we(),
+        .rvfi_mem_addr(), .rvfi_mem_rdata(), .rvfi_mem_wdata());
+    /* verilator lint_on PINCONNECTEMPTY */
 
     // ---- memories ---------------------------------------------------------------------
     (* ram_style = "block" *)              logic [15:0] rom [2048];
