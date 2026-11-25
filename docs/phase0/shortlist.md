@@ -69,3 +69,6 @@ SWAR 2×8-bit add (T18), enumerated shifts (T17), compressed or variable-length 
 
 **Narrowed 2026-11-24 by [D-005](../decisions/D-005-f1-f5-benchmarks.md):** only F1 and F5
 go on to the Phase 3 benchmarks. F2, F3 and F4 are dropped on the Phase 2 measurements.
+
+**Closed 2026-11-24 by [D-006](../decisions/D-006-commit-f1.md):** the CPU is **F1 with
+4 threads**. It led F5 by 1.31× on the D-002 geometric mean (`docs/phase3/benchmarks.md`).

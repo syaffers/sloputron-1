@@ -136,10 +136,15 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     - F5 stalls: 28,526 (338 LC, 84.1 MHz).
 
     F1 with 4 threads leads by 1.31×. On whole-system cells the two are level (1.02×).
-  - Still to do: commit to one concept (owner decision).
+  - **D-006: the CPU is F1 with 4 threads** (barrel, two-operand registers, state in BRAM).
+  - Next, for F1 only:
+    - the ISA spec (TOML), from which the assembler rules and decode tables are generated;
+    - the C99 ISS, Verilator lockstep and formal checks;
+    - the core in `rtl/` with `results.csv` rows and a hardware PLL Fmax check;
+    - the UART choice: a hardware UART or a software thread.
 
-Shortlist (D-001), a 2×2 of thread organisation × operand model. Since D-005 only F1 and
-F5 remain. F5 runs F1's two-operand register ISA on a single thread (D-003).
+Shortlist (D-001), a 2×2 of thread organisation × operand model. D-005 narrowed it to F1
+and F5 (F5 runs F1's ISA on a single thread, D-003). **D-006 chose F1 with 4 threads.**
 
 | | Stack (stacks in BRAM) | Register window / accumulator (RF in BRAM) |
 |---|---|---|
