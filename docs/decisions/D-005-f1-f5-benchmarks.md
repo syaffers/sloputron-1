@@ -1,7 +1,7 @@
 # D-005 — Narrow the shortlist to F1 and F5; memory rules for N-copy benchmarks
 
 **Status:** accepted, 2026-11-24 (owner). **Amends:** D-001 (shortlist) and D-002
-(benchmark data layout).
+(benchmark data layout, which cells are scored).
 
 ## Context
 On the Phase 2 crc test (`docs/phase2/skeletons.md`), the two-operand register cores led:
@@ -35,15 +35,23 @@ one copy needs a 256-word source and a 256-word destination. Scoring barrels on 
      program and the core's own blocks.
 3. **memcpy needs 512 words per copy** (256 source, 256 destination). D-002's "fits in one
    BRAM" applies to the other three kernels only.
+4. **The score counts the core's cells, not the whole system's** (owner, 2026-11-24, after
+   the first benchmark run). Cells are measured in the standard skeleton harness: a 4 KB
+   ROM, a 256-word RAM and the LED port. The extra memory logic a barrel needs for N
+   separate output buffers is an artefact of the N-copy rule, so it is reported but not
+   scored. Every configuration must still fit the chip as a whole system.
 
 ## Consequences
 - F1 and F5 share one instruction set, so each kernel is written once and runs on both.
 - F1 with 8 threads needs about 9 data blocks for memcpy (1 shared source and 8
   destinations), on top of its 3 core blocks. That leaves 4 blocks (2 KB) of program
   space while memcpy runs.
-- **Measured** (`docs/phase3/benchmarks.md`, 16 seeds, OSS CAD Suite 2026-11-01):
-  - Geometric mean per 1000 core cells: F1 with 4 threads 33,264; with 8 threads 32,610;
-    F5 with stalls 23,566. So F1 leads by 1.41×.
-  - On whole-system cells (memory logic included) the lead is 1.10× with 4 threads, and
-    F1 with 8 threads falls behind F5.
-  - All systems fit: at most 14 BRAMs and 479 cells.
+- **Measured** (`docs/phase3/benchmarks.md`, 16 seeds, OSS CAD Suite 2026-11-01, ISA v3
+  with a carry flag): geometric mean per 1000 core cells:
+  - F1 with 4 threads: 37,364;
+  - F1 with 8 threads: 35,974;
+  - F5 with stalls: 28,526.
+
+  F1 with 4 threads leads by 1.31×. (The first run, v2, compared through the carry chain
+  in one cycle and gave 1.41×, at lower clocks.) On whole-system cells the two are level
+  (1.02×). All systems fit: at most 14 BRAMs and 484 cells.

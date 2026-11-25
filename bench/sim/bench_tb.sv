@@ -1,7 +1,7 @@
 // D-002 benchmarks on F1 and F5 (D-005), plus a pseudo-random hazard test. Each run loads one kernel (bench/kernels.py) into
 // bench_top with a 4096-word data memory and waits until every thread has stored to the
-// done address (0xFFF). It then compares the whole data memory with the image the
-// reference interpreter expects. It prints the cycle count to the last thread's done
+// done address (0xFFF). It then compares the whole data memory, except that shared done
+// word, with the image the reference interpreter expects. It prints the cycle count to the last thread's done
 // store; all N copies run at once.
 `timescale 1ns/1ps
 `default_nettype none
@@ -32,7 +32,7 @@ module bench_run #(parameter int CORE = 1, parameter int N = 4, parameter bit FW
             if (dut.dwe && &dut.dwa) finished++;
         end
         repeat (20) @(posedge clk);
-        for (int i = 0; i < 4096; i++)
+        for (int i = 0; i < 4095; i++)               // 0xFFF is the done port: last writer wins
             if (dut.ram[i] !== expect_mem[i]) begin
                 if (wrong < 5) $display("%s %s: D[%03h] = %04h, expected %04h", NAME, KERNEL, i,
                                         dut.ram[i], expect_mem[i]);

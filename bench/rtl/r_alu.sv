@@ -1,6 +1,6 @@
-// ALU and skip conditions for the two-operand register ISA, v2 (F1 and F5; D-005).
-// The ALU is skel_alu plus a carry out: co = 1 when x - s does not borrow (x >= s unsigned),
-// so a skip can compare two registers with the existing adder.
+// ALU and skip conditions for the two-operand register ISA, v3 (F1 and F5; D-005).
+// The ALU is skel_alu plus a carry out. add and sub copy it into the core's carry flag C:
+// after add, C = carry; after sub (or cmp), C = 1 when x >= s unsigned (no borrow).
 `default_nettype none
 module r_alu (
     input  wire  [2:0]  op,                     // add sub and or xor pass shl shr
@@ -25,17 +25,17 @@ module r_alu (
     endcase
 endmodule
 
-// cc: 0 always, 1 rd == 0, 2 rd != 0, 3 rd < 0, 4 rd >= 0, 5 rd < rs (unsigned),
-//     6 rd >= rs (unsigned), 7 rd odd. co must come from r_alu computing rd - rs.
-module r_cond (input wire [15:0] v, input wire co, input wire [2:0] cc, output logic t);
+// cc: 0 always, 1 rd == 0, 2 rd != 0, 3 rd < 0, 4 rd >= 0, 5 C clear, 6 C set, 7 rd odd.
+// After `cmp rd, rs`: 5 = rd < rs unsigned, 6 = rd >= rs unsigned.
+module r_cond (input wire [15:0] v, input wire cf, input wire [2:0] cc, output logic t);
     always_comb case (cc)
         3'd0: t = 1'b1;
         3'd1: t = v == 16'd0;
         3'd2: t = v != 16'd0;
         3'd3: t = v[15];
         3'd4: t = !v[15];
-        3'd5: t = !co;
-        3'd6: t = co;
+        3'd5: t = !cf;
+        3'd6: t = cf;
         default: t = v[0];
     endcase
 endmodule

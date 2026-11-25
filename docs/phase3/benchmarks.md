@@ -11,91 +11,97 @@ OSS CAD Suite 2026-11-01 (Yosys 0.70+286, nextpnr 0.11.1-85-ga2c64799), `--freq 
 seeds 1..16, measured on linux-aarch64. Regenerate with `bench/run.py` (about 35 min on
 3 cores), then `bench/score.py`. Raw numbers are in `bench/bench.csv` and `bench/score.csv`.
 
-## Result
+## Result (instruction set v3, with a carry flag)
 
 | Core | Cells | Fmax median / worst (MHz) | crc16 | sort | mul16 | memcpy | **Geometric mean** |
 |---|---:|---|---:|---:|---:|---:|---:|
-| **F1, 4 threads** | 330 | 74.0 / 70.2 | 15,122 | 33,186 | 19,679 | 123,978 | **33,264** |
-| F1, 8 threads | 337 | 74.0 / 71.3 | 14,825 | 32,533 | 19,291 | 121,551 | 32,610 |
-| F5, stalls | 336 | 66.4 / 59.7 | 10,559 | 22,651 | 13,548 | 95,175 | 23,566 |
-| F5, forwarding | 386 | 63.2 / 59.1 | 10,139 | 19,208 | 12,732 | 90,459 | 21,762 |
+| **F1, 4 threads** | 336 | 90.0 / 87.1 | 18,070 | 30,965 | 23,514 | 148,143 | **37,364** |
+| F1, 8 threads | 349 | 90.0 / 86.6 | 17,397 | 29,812 | 22,639 | 142,644 | 35,974 |
+| F5, stalls | 338 | 84.1 / 74.3 | 13,292 | 23,427 | 17,747 | 119,810 | 28,526 |
+| F5, forwarding | 377 | 76.7 / 69.6 | 12,590 | 19,514 | 15,810 | 112,329 | 25,701 |
 
 Each kernel column is iterations/s per 1000 cells: copies × Fmax median ÷ cycles ÷ cells. A
-barrel runs N copies at once (D-004). Cells are the core in the standard skeleton harness,
-the same measurement as Phase 2.
+barrel runs N copies at once (D-004). Cells are the core in the standard skeleton harness
+(D-005 decision 4), the same measurement as Phase 2.
 
-- **F1 leads F5 by 1.41× on the geometric mean.** Per kernel the lead is 1.43–1.47×, except
-  memcpy at 1.30×. This matches the 1.42× from the Phase 2 crc test.
-- **4 and 8 threads score the same.** 8 threads cost 7 more cells and run the same clock.
-- **Forwarding loses again**, now on all four kernels: 50 more cells and a slower clock buy
-  2% (sort) to 14% (crc16) fewer cycles.
+- **F1 with 4 threads leads F5 by 1.31× on the geometric mean**, and by 1.24× (memcpy) to
+  1.36× (crc16) per kernel. The carry flag narrowed the lead from 1.41× (v2, below) because
+  it gave F5 back more clock speed than F1.
+- **4 threads beat 8** by 4%. 8 threads cost 13 more cells and run the same clock.
+- **Forwarding loses on every kernel.** 39 more cells and a 9% slower clock buy 2% (sort)
+  to 14% (crc16) fewer cycles.
+- **One program on its own runs 3× faster on F5** (crc16: 223 µs against 659 µs on F1
+  with 4 threads). D-002 ranks on N copies, so this is information only.
 
 Cycles (all copies) and instructions per copy:
 
 | Kernel | Instructions per copy | F1, 4 threads | F1, 8 threads | F5, stalls | F5, forwarding |
 |---|---:|---:|---:|---:|---:|
 | crc16 | 14,818 | 59,274 | 118,546 | 18,721 | 16,149 |
-| sort | 6,752 | 27,010 | 54,018 | 8,727 | 8,524 |
-| mul16 | 11,387 | 45,550 | 91,098 | 14,591 | 12,860 |
+| sort | 8,647 | 34,590 | 69,178 | 10,622 | 10,419 |
+| mul16 | 11,387 | 45,550 | 91,098 | 14,022 | 12,860 |
 | memcpy | 1,807 | 7,230 | 14,458 | 2,077 | 1,810 |
 
-F1 issues one instruction every cycle, shared among its threads. F5 needs 1.15–1.29 cycles
-per instruction (taken skips, calls and stalls).
+F1 issues one instruction every cycle, shared among its threads. F5 with stalls needs
+1.15–1.26 cycles per instruction (taken skips, calls and stalls).
 
-**Code size** (the secondary metric): crc16 34 words, sort 34, mul16 43, memcpy 24. That is
-135 words (270 bytes) in total, including a 13-word start-up and finish in each kernel.
+**Code size** (the secondary metric): crc16 34 words, sort 37, mul16 43, memcpy 24. That is
+138 words (276 bytes) in total, including a 13-word start-up and finish in each kernel.
 
-## Two things that qualify the result
+## The compare fix (v2 → v3)
 
-### 1. The new compare-and-skip costs both cores 15–23% of their clock
+The first run (v2) gave unsigned compares a skip that compared two registers through the
+ALU's carry, all in one cycle. That carry chain then sat on both cores' longest path:
+- **F1:** register → carry chain → skip decision → next PC → PC memory.
+- **F5:** register → carry chain → skip decision → next fetch address → program ROM.
 
-Sort and the multiply's carry need an unsigned compare. The instruction set gained a skip
-that compares two registers through the ALU's carry. That carry now sits on each core's
-longest path:
-- **F1:** register file → operand mux → 16-bit carry chain → skip decision → next PC →
-  PC memory. 87 → 74 MHz.
-- **F5:** register file → carry chain → skip decision → discard the next instruction → next
-  fetch address → program ROM. 86 → 66 MHz.
+v3 replaces it with a **carry flag C**:
+- `add` and `sub` set C;
+- `cmp` is a `sub` that does not write its result;
+- the skip tests C one instruction later.
 
-F5 loses more because its skip also steers the fetch in the same cycle. Some of F1's lead
-(how much is not measured) therefore comes from this one instruction. A cheaper design
-would take the compare off the critical path:
-- **a carry flag:** a compare or an add writes a 1-bit flag, and the skip tests the flag a
-  cycle later;
-- **or a late PC select:** write the PC memory on the falling edge.
+In F1, each thread's C is stored as bit 11 of its PC entry, so it costs no flip-flops per
+thread. In F5, C is one flip-flop. Sort pays one `cmp` per compare: 28% more instructions.
+mul16 uses the carry of its `add` directly, so it costs nothing there.
 
-The flag costs one extra instruction per compare in sort's inner loop. That is the next
-experiment.
+| Core | v2: cells, Fmax | v2 geometric mean | v3: cells, Fmax | v3 geometric mean |
+|---|---|---:|---|---:|
+| F1, 4 threads | 330, 74.0 MHz | 33,264 | 336, 90.0 MHz | **37,364** (+12%) |
+| F1, 8 threads | 337, 74.0 MHz | 32,610 | 349, 90.0 MHz | 35,974 (+10%) |
+| F5, stalls | 336, 66.4 MHz | 23,566 | 338, 84.1 MHz | 28,526 (+21%) |
+| F5, forwarding | 386, 63.2 MHz | 21,762 | 377, 76.7 MHz | 25,701 (+18%) |
 
-### 2. Counting the whole system's cells shrinks the gap
+Sort still loses a little on F1, where the extra `cmp` costs more than the clock gains
+(33,186 → 30,965). Every other kernel gains on both cores. The v2 code and numbers are in
+PR #10 (branch `phase3-bench`).
 
-N copies need N output regions. F1's data memory grows to 256 × (N+1) words, and the logic
-that joins those blocks into one memory is cells. The "fit" rows of `bench/bench.csv` hold
-the whole system each configuration needs: a 1 KB ROM, the data RAM, 12-bit data addresses,
-16 seeds.
+## Whole-system cells (reported, not scored)
+
+N copies need N output regions, so F1's data memory grows to 256 × (N+1) words. The logic
+that joins those blocks into one memory adds cells. The "fit" rows of `bench/bench.csv` hold
+the whole system each configuration needs: a 1 KB ROM, the data RAM, 12-bit data
+addresses, 16 seeds.
 
 | System | Cells | BRAM | Fmax median | Geometric mean (per 1000 system cells) |
 |---|---:|---:|---|---:|
-| F1, 4 threads | 392 | 10 | 70.7 | 26,784 |
-| F1, 8 threads | 479 | 14 | 71.5 | 22,171 |
-| F5, stalls | 335 | 6 | 68.5 | 24,362 |
-| F5, forwarding | 372 | 6 | 63.0 | 22,517 |
+| F1, 4 threads | 402 | 10 | 89.5 | 31,084 |
+| F1, 8 threads | 484 | 14 | 88.5 | 25,505 |
+| F5, stalls | 334 | 6 | 88.4 | 30,350 |
+| F5, forwarding | 377 | 6 | 78.4 | 26,281 |
 
-On system cells, F1 with 4 threads leads F5 by only 1.10×, and F1 with 8 threads falls
-behind F5. The extra cells pay only for the N-copy benchmark rule. A real program running
-on F1 would not need 8 separate 256-word output buffers. The table above therefore scores
-the core, as Phase 2 did. All four systems fit the chip: at most 14 of 16 BRAMs and 479 of
-1,280 cells.
+On system cells F1 with 4 threads and F5 are level (1.02×). That gap pays only for the
+N-copy rule, so the score counts the core (D-005 decision 4, owner). All systems fit the
+chip: at most 14 of 16 BRAMs and 484 of 1,280 cells.
 
 ## How it was built
 
-- **Instruction set v2** (`bench/rtl/r_f1.sv` documents the encoding) is the Phase 2
-  two-operand set with three changes:
-  - the skip compares two registers, with 8 conditions: always, zero, non-zero, negative,
-    non-negative, unsigned <, unsigned ≥, odd;
-  - data addresses are as wide as the data memory (12 bits here);
+- **Instruction set v3** (`bench/rtl/r_f1.sv` documents the encoding) is the Phase 2
+  two-operand set plus:
+  - the carry flag and `cmp`;
+  - 8 skip conditions: always, zero, non-zero, negative, non-negative, C clear, C set, odd;
+  - data addresses as wide as the data memory (12 bits here);
   - r15 holds the thread number from configuration, so each thread finds its own region.
-- **Cores:** `bench/rtl/r_f1.sv` and `r_f5.sv` are the Phase 2 skeletons with these
+- **Cores:** `bench/rtl/r_f1.sv` and `r_f5.sv` are the Phase 2 skeletons with those
   changes. `r_alu.sv` is the skeleton ALU plus a carry out and the 8 conditions. F1
   computes PC+2 a stage early, so a taken skip only selects it.
 - **Harness:** `bench/rtl/bench_top.sv` is the skeleton harness with the ROM and RAM sizes
@@ -107,21 +113,21 @@ the core, as Phase 2 did. All four systems fit the chip: at most 14 of 16 BRAMs 
 - **Programs** (`bench/kernels.py`): straightforward loops, not unrolled. Each load is
   scheduled at least two instructions before its use, so F5 never stalls on a load.
   Loop overhead dominates: crc16 spends 7 instructions per bit, of which 3 are loop
-  control. Unrolling would help both cores about equally.
+  control.
 - **Checks:**
   - A reference interpreter in `bench/kernels.py` runs every kernel and must reproduce
     D-002's check values: crc 0x2865; sort's min, max and weighted sum; the first product
     and the XOR of the 64 products; memcpy equality.
   - The testbench (`make sim`, units `r_f1` and `r_f5`) runs each kernel on the RTL and
-    compares the whole 4096-word data memory with the interpreter's.
-  - A pseudo-random hazard program tests the pipeline: back-to-back dependencies, compare
-    skips right after a write, loads used at once.
-  - Ten broken variants of the cores all fail at least one test.
+    compares the whole data memory with the interpreter's (except the shared done word).
+  - A pseudo-random hazard program, with different values in every thread, tests
+    back-to-back dependencies, compares, carry-flag skips (including after a discarded
+    instruction) and loads used at once.
+  - 13 broken variants of the v3 cores all fail.
 
 ## Next
-1. **Take the compare off the critical path** in both cores (a carry flag, or a late PC
-   select). Then re-measure. This affects F5 more than F1, so it could narrow the 1.41×.
-2. **Unroll the inner loops** (crc16's bit loop, mul16's bit loop). This is code-size
-   against speed, which D-002 tracks as the secondary metric.
-3. **Commit to a concept** once item 1 is in. On these numbers it would be F1 with 4
-   threads.
+- **Commit to a concept.** On these numbers it is F1 with 4 threads. That needs the owner's
+  decision record.
+- **Unroll the inner loops** (crc16's and mul16's bit loops). This trades code size for
+  speed, and D-002 tracks code size as the secondary metric. It helps both cores about
+  equally.
