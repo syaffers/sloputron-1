@@ -1,6 +1,6 @@
 # isa/ — the sloputron-1 instruction set
 
-`isa.toml` is the single source for the instruction set: formats, mnemonics, ALU operations,
+`isa.toml` is the single source for the instruction set (version 1.0, D-008): formats, mnemonics, ALU operations,
 skip conditions, the execution model and the data address map. Everything else is
 generated from it or reads it:
 
@@ -10,7 +10,8 @@ generated from it or reads it:
 | `isa.py` | library that loads the spec: encode, decode, a two-pass assembler, a disassembler. The assembly syntax is at the top of the file. |
 | `asm.py` | command line: `isa/asm.py prog.s -o prog.hex [--list prog.lst]`, `isa/asm.py --disasm prog.hex` |
 | `gen.py` | writes `docs/isa/isa.md` (the written spec) and `rtl/core/isa_pkg.sv` (decode constants for the RTL) |
-| `test_isa.py` | checks that every canonical 16-bit encoding disassembles and re-assembles to itself, that the Phase 3 benchmark binaries agree with the spec, and some syntax cases |
+| `iss.py` | instruction-set simulator of the board: the 4-thread barrel, RAM, UART and LEDs. `isa/iss.py prog.hex --rx TEXT` prints the UART output; `scripts/board_sweep.py` uses it to count clocks |
+| `test_isa.py` | checks that every canonical 16-bit encoding disassembles and re-assembles to itself, that the Phase 3 benchmark binaries (0.3 and 1.0) agree with the spec, some syntax cases, and that the ISS runs the demo |
 
 After editing `isa.toml`, run `make isa` and commit the generated files with it. `make sim`
 (and CI) runs `make isa-test`, which fails if they are out of date.

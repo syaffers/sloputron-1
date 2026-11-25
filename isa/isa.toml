@@ -4,18 +4,24 @@
 
 [isa]
 name    = "sloputron-1"
-version = "0.3"
-status  = "draft"
+version = "1.0"
+status  = "final for F1, D-008"
 summary = """
 A 16-bit, two-operand register instruction set for a 4-thread barrel processor (D-006).
 Every instruction is one 16-bit word. Each thread has its own 16 registers, PC and carry
 flag. Instructions are fetched from a word-addressed program ROM, and data is accessed
 with word loads and stores to a separate data space (a Harvard layout)."""
 history = """
-0.3 is the instruction set measured in Phase 3 as "v3" (`docs/phase3/benchmarks.md`). It is
-the two-operand set from the Phase 2 skeletons plus a carry flag, `cmp`, 8 skip
-conditions, wide data addresses and a thread number in r15. Nothing is final: changes are
-proposed with measurements and recorded as decisions."""
+0.3 was the set measured in Phase 3 as "v3" (`docs/phase3/benchmarks.md`): the two-operand
+set from the Phase 2 skeletons plus a carry flag, `cmp`, 8 skip conditions, wide data
+addresses and a thread number in r15. 1.0 (D-008) is the set for F1 alone. It adds three
+measured extensions, each in encoding space that 0.3 left unused:
+- branch on C (`bcc`, `bcs`) in the jump's spare bits;
+- carry shifts: `shl`/`shr` set C to the bit shifted out, and `rcl`/`rcr` shift C in;
+- a 4-bit offset on `ld` and `st`.
+
+Together they give 1.23× the work per clock per cell on the D-002 kernels. 0.3 programs
+assemble unchanged; only code that kept C across a shift behaves differently."""
 
 word_bits    = 16
 pc_bits      = 11      # program ROM: 2048 words (4 KB)
@@ -31,20 +37,29 @@ execution = """
 - **Start-up.** At configuration every thread starts at address 0 with C = 0 and r15 =
   its thread number (0–3). The other registers start undefined, and software must set them
   before use. A thread separates itself from the others by testing r15.
-- **Data accesses** are 16-bit words at the address in rs (the low `data_bits` bits).
-  There are no byte loads.
+- **Data accesses** are 16-bit words at the address rs + k, where k is a 4-bit unsigned
+  offset (0–15, default 0). The low `data_bits` bits of the sum are used. There are no
+  byte loads.
 - **Carry flag C.** `add` and `sub` set it, in both the register and immediate forms, and
   so does `cmp`. After `add`, C = carry out. After `sub` or `cmp`, C = 1 when rd ≥ rs or
-  imm, unsigned (no borrow). Every other instruction leaves C unchanged. `skip cc` and
-  `skip cs` test it.
+  imm, unsigned (no borrow). The shifts (`shl`, `shr`, `rcl`, `rcr`) set C to the bit
+  shifted out. Every other instruction leaves C unchanged. `skip cc`, `skip cs`, `bcc` and
+  `bcs` test it.
+- **Shifts through C.** `rcl` and `rcr` shift C in where `shl` and `shr` shift in 0. So
+  `shl lo` then `rcl hi` shifts a 32-bit value left, and `shr x` then `skip cc` tests the
+  bit that left x.
 - **Immediates** are 8 bits, sign-extended in the ALU form: `li` loads −128..127. The
   assembler also accepts 128..255 and stores the low 8 bits, so `li r1, 200` loads
   0xFFC8. `ldhi` sets the high byte, so any 16-bit constant is `li` then `ldhi`.
 - **Calls.** `jal rd, rs` jumps to the address in rs and saves the return address (PC+1)
   in rd. A return is `jal r0, rN`, which writes the address after the return into r0, so
   r0 is a scratch register by convention.
-- **Skips** discard the next instruction when their condition holds. With a `jmp` after
-  them they make any conditional branch."""
+- **Branches.** `jmp`, `bcs` and `bcc` take an absolute 11-bit target. `bcs` jumps when C
+  is set and `bcc` when it is clear, so `cmp` then `bcc` is a compare-and-branch.
+- **Skips** discard the next instruction when their condition holds, at no cost: a skipped
+  instruction takes no cycle. A skip and a `jmp` make a branch on any condition.
+- **Counted loops.** Count up from −n to 0: `add rN, 1` sets C on the step that reaches 0,
+  so `add rN, 1` then `bcc loop` closes a loop in 2 instructions."""
 
 conventions = """
 - r15: thread number at start-up. Software may overwrite it.
@@ -52,17 +67,25 @@ conventions = """
 - Everything else is free. The Phase 3 kernels use r14 for a thread's data-region base."""
 
 open_items = """
-Measured proposals for later versions, not part of 0.3:
-- A 12-bit PC. The 11-bit PC limits programs to 4 KB, while F1 leaves up to 6 KB of BRAM
-  for code.
-- Unrolled kernels against code size (D-002's secondary metric).
-- A multiply step or shift-by-N, if mul16 or crc16 pay for its cells.
-- Load/store with an offset, if sort or memcpy pay for the adder.
-- Generated customasm rules and C decode tables (planned in CLAUDE.md). customasm is not in
-  the pinned toolchain, so the assembler is `isa/asm.py`, driven by this file."""
+Settled in D-008 (measurements in `docs/phase3/benchmarks.md`):
+- **12-bit PC: no.** The jump's spare bits now hold the branch condition. The board's ROM is
+  4 KB (8 BRAMs), and only one BRAM is spare.
+- **Multiply step: no.** It writes two registers, and the register file has one write
+  port. `rcr` gives mul16 1.52× without it.
+- **Shift-by-N: no.** A barrel shifter is 134 cells (`docs/phase2/primitives.md`), +40%.
+- **Load/store offset: yes**, in the 4 bits that 0.3 ignored. Rolled loops gain little
+  (sort 1.14×); unrolled loops gain most (memcpy 2.4×).
+- **Unrolling** is a programming choice, not an ISA feature. The scored kernels stay rolled;
+  unrolled versions are reported beside them with their code size.
+- **customasm rules: dropped.** customasm is not in the pinned toolchain, and `isa/asm.py`
+  reads this file directly. C decode tables come with the C ISS.
+
+Encodings left for later: jump condition 3, the immediate forms of the shifts (op 6 and 7),
+and rs values 2–15 in the shift forms."""
 
 # ---- formats: bit patterns, MSB first. Letters are fields, - is ignored (write 0) ----------
-# d rd, s rs, o ALU op, w no-write, i imm8, c condition, t jump target
+# d rd, s rs, o ALU op, w no-write, i imm8, c condition, t jump target, k offset,
+# b jump condition
 [formats.alu_imm]
 pattern = "0ooo dddd iiii iiii"
 title   = "ALU, immediate"
@@ -70,10 +93,10 @@ title   = "ALU, immediate"
 pattern = "1000 dddd ssss wooo"
 title   = "ALU, register"
 [formats.load]
-pattern = "1001 dddd ssss ----"
+pattern = "1001 dddd ssss kkkk"
 title   = "Load"
 [formats.store]
-pattern = "1010 dddd ssss ----"
+pattern = "1010 dddd ssss kkkk"
 title   = "Store"
 [formats.ldhi]
 pattern = "1011 dddd iiii iiii"
@@ -85,8 +108,8 @@ title   = "Skip"
 pattern = "1101 dddd ssss ----"
 title   = "Jump and link"
 [formats.jmp]
-pattern = "111- -ttt tttt tttt"
-title   = "Jump"
+pattern = "111b bttt tttt tttt"
+title   = "Jump / branch"
 
 # ---- ALU operations (field o). x = rd, s = rs or sext(imm8) ---------------------------------
 [[alu]]
@@ -118,11 +141,13 @@ op   = "s"
 [[alu]]
 code = 6
 name = "shl"
-op   = "x << 1"
+op   = "x << 1, bit 0 = 0 (shl) or C (rcl)"
+carry = "old bit 15"
 [[alu]]
 code = 7
 name = "shr"
-op   = "x >> 1 (logical)"
+op   = "x >> 1, bit 15 = 0 (shr) or C (rcr)"
+carry = "old bit 0"
 
 # ---- skip conditions (field c) --------------------------------------------------------------
 [[cond]]
@@ -201,24 +226,32 @@ desc = "rd ← sext(imm)"
 forms = [{ format = "alu_imm", syntax = "rd, imm", set = { o = 5 } }]
 [[insn]]
 name = "shl"
-desc = "rd ← rd << 1"
+desc = "rd ← rd << 1; C ← old bit 15"
 forms = [{ format = "alu_reg", syntax = "rd", set = { o = 6 } }]
 [[insn]]
 name = "shr"
-desc = "rd ← rd >> 1 (logical)"
+desc = "rd ← rd >> 1 (logical); C ← old bit 0"
 forms = [{ format = "alu_reg", syntax = "rd", set = { o = 7 } }]
+[[insn]]
+name = "rcl"
+desc = "rd ← {rd[14:0], C}; C ← old bit 15"
+forms = [{ format = "alu_reg", syntax = "rd", set = { o = 6, s = 1 } }]
+[[insn]]
+name = "rcr"
+desc = "rd ← {C, rd[15:1]}; C ← old bit 0"
+forms = [{ format = "alu_reg", syntax = "rd", set = { o = 7, s = 1 } }]
 [[insn]]
 name = "nop"
 desc = "no effect (or r0, 0)"
 forms = [{ format = "alu_imm", syntax = "", set = { o = 3 } }]
 [[insn]]
 name = "ld"
-desc = "rd ← D[rs]"
-forms = [{ format = "load", syntax = "rd, [rs]" }]
+desc = "rd ← D[rs + k]; k = 0–15, written [rs] or [rs+k]"
+forms = [{ format = "load", syntax = "rd, [rs+k]" }]
 [[insn]]
 name = "st"
-desc = "D[rs] ← rd"
-forms = [{ format = "store", syntax = "rd, [rs]" }]
+desc = "D[rs + k] ← rd"
+forms = [{ format = "store", syntax = "rd, [rs+k]" }]
 [[insn]]
 name = "ldhi"
 desc = "rd ← {imm, rd[7:0]}"
@@ -235,7 +268,15 @@ forms = [{ format = "jal", syntax = "rd, rs" }]
 [[insn]]
 name = "jmp"
 desc = "PC ← target"
-forms = [{ format = "jmp", syntax = "target" }]
+forms = [{ format = "jmp", syntax = "target", set = { b = 0 } }]
+[[insn]]
+name = "bcs"
+desc = "if C: PC ← target"
+forms = [{ format = "jmp", syntax = "target", set = { b = 1 } }]
+[[insn]]
+name = "bcc"
+desc = "if not C: PC ← target"
+forms = [{ format = "jmp", syntax = "target", set = { b = 2 } }]
 
 # ---- data address space ---------------------------------------------------------------------
 [memory]

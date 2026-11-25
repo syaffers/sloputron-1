@@ -10,9 +10,9 @@
 //
 // Pipeline, thread t (one stage per clock; the 4 threads occupy the 4 stages):
 //   S0  {C, PC} arrives from pcm -> program ROM read; PC+1 and PC+2 computed
-//   S1  instruction arrives -> register reads, decode
-//   S2  operands arrive -> ALU, carry flag, skip condition, data access at rs; the next
-//       {C, PC} is written back to pcm
+//   S1  instruction arrives -> register reads, decode; bcc/bcs resolved (C came with the PC)
+//   S2  operands arrive -> ALU, carry flag, skip condition, data access at rs + k; the
+//       next {C, PC} is written back to pcm
 //   S3  register write (ALU result, or the loaded word)
 // The PC is written at the end of S2 and read for the thread's next turn N-1 cycles after
 // S0, so N >= 4. A thread's next instruction starts after its previous one has finished:
@@ -20,21 +20,24 @@
 //
 // Start-up hold: iCE40 block RAMs read back wrong for a short time after configuration
 // (seen on the board 2026-11-24: every thread read r15 as 0). The core therefore commits
-// nothing (no PC, register or memory writes) until STARTUP clocks have passed. Only
-// instructions fetched after that are executed, so every thread starts cleanly at PC 0.
+// nothing (no PC, register or memory writes) until `run` has been high for STARTUP clocks.
+// Only instructions fetched after that are executed, so every thread starts cleanly at
+// PC 0. `run` is the PLL's lock signal when the clock comes from the PLL, else 1.
 //
-// This is bench/rtl/r_f1.sv (Phase 3, ISA v3 = 0.3), with the decode taken from isa_pkg,
-// a load strobe (dre) for I/O reads that have side effects, and the start-up hold.
+// ISA 1.0 (D-008) is 0.3 plus branch on C, carry shifts and a load/store offset. This is
+// bench/rtl/r_f1.sv with X = 7 (all three), with the decode taken from isa_pkg, a load
+// strobe (dre) for I/O reads that have side effects, and the start-up hold.
 `default_nettype none
 module f1_core
     import isa_pkg::*;
 #(
     parameter int  N  = THREADS,
     parameter int  DA = DATA_BITS,
-    parameter int  STARTUP = 1024,              // clocks before the first instruction
+    parameter int  STARTUP = 1024,              // clocks before the first instruction (a power of 2)
     localparam int TB = $clog2(N)
 ) (
     input  wire           clk,
+    input  wire           run,                  // 0 holds the start-up count at zero
     output wire  [10:0]   iaddr,
     input  wire  [15:0]   insn,                 // rom[iaddr], one cycle later
     output wire  [DA-1:0] daddr,
@@ -57,7 +60,8 @@ module f1_core
     logic [$clog2(STARTUP)-1:0] wait_n = '0;
     logic go = 1'b0, g0 = 1'b0, g1 = 1'b0, g2 = 1'b0, g3 = 1'b0;
     always_ff @(posedge clk) begin
-        if (!go) wait_n <= wait_n + 1'b1;
+        if (!run)    wait_n <= '0;
+        else if (!go) wait_n <= wait_n + 1'b1;
         if (&wait_n) go <= 1'b1;
         g0 <= go;
         g1 <= g0;
@@ -93,12 +97,16 @@ module f1_core
     wire is_jal  = (insn & FMT_JAL_MASK)     == FMT_JAL_MATCH;
     wire is_jmp  = (insn & FMT_JMP_MASK)     == FMT_JMP_MATCH;
     wire [2:0] op = is_alui ? insn[14:12] : is_alur ? insn[2:0] : ALU_PASS;
+    wire       is_alu = is_alui | is_alur;
+    // jump bits 12..11: 0 always (jmp), 1 if C (bcs), 2 if not C (bcc); 3 is reserved (jumps)
+    wire       jump = is_jmp & (insn[12:11] == 2'd0 | (insn[11] & cf1) | (insn[12] & !cf1));
 
     logic [TB-1:0] th2;
     logic [15:0]   xd, xs;
     logic [2:0]    op2, cc2;
     logic [1:0]    src2;                            // s = 0 rs, 1 sext(i), 2 {i, rd[7:0]}, 3 PC+1
-    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, cf2;
+    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, sh2, ci2, cf2;
+    logic [3:0]    off2;
     logic [3:0]    rd2;
     logic [10:0]   ins2, pc12, pc22;
     always_ff @(posedge clk) begin
@@ -108,12 +116,15 @@ module f1_core
         op2   <= op;
         src2  <= is_alui ? 2'd1 : is_alur ? 2'd0 : is_ldhi ? 2'd2 : 2'd3;
         we2   <= is_alui | (is_alur & !insn[3]) | is_ld | is_ldhi | is_jal;
-        setc2 <= (is_alui | is_alur) & (op == ALU_ADD || op == ALU_SUB);
+        setc2 <= is_alu & (op == ALU_ADD || op == ALU_SUB);
+        sh2   <= is_alu & (op == ALU_SHL || op == ALU_SHR);
+        ci2   <= is_alur & insn[4];                 // rcl / rcr: shift C in
+        off2  <= insn[3:0];                         // ld / st offset
         ld2   <= is_ld;
         st2   <= is_st;
         sk2   <= is_sk;
         jal2  <= is_jal;
-        jmp2  <= is_jmp;
+        jmp2  <= jump;
         cc2   <= insn[2:0];
         rd2   <= insn[11:8];
         ins2  <= insn[10:0];
@@ -132,17 +143,19 @@ module f1_core
     endcase
     wire [15:0] y;
     wire        co;
-    f1_alu alu (.op(op2), .x(xd), .s, .y, .co);
+    wire        so;
+    f1_alu alu (.op(op2), .x(xd), .s, .ci(ci2 & cf2), .y, .co, .so);
     wire c;
     f1_cond cnd (.v(xd), .cf(cf2), .cc(cc2), .t(c));
     wire [10:0] pcn = jmp2 ? ins2 : jal2 ? xs[10:0] : (sk2 & c) ? pc22 : pc12;
-    wire        cfn = setc2 ? co : cf2;
+    wire        cfn = setc2 ? co : sh2 ? so : cf2;
     always_ff @(posedge clk) if (g2) pcm[th2] <= {cfn, pcn};
 
-    assign daddr = xs[DA-1:0];
+    wire [DA-1:0] ea = xs[DA-1:0] + DA'(off2);       // rs + k
+    assign daddr = ea;
     assign dre   = ld2 & g2;
     assign dwe   = st2 & g2;
-    assign dwa   = xs[DA-1:0];
+    assign dwa   = ea;
     assign dwd   = xd;
 
     // ---- S3: register write -----------------------------------------------------------
@@ -165,14 +178,17 @@ module f1_core
 endmodule
 
 // ALU: x = rd, s = rs or immediate. co = carry out of add, or 1 = no borrow for sub.
+// ci = the bit a shift brings in (C for rcl/rcr, else 0); so = the bit it drops.
 module f1_alu
     import isa_pkg::*;
 (
     input  wire  [2:0]  op,
     input  wire  [15:0] x,
     input  wire  [15:0] s,
+    input  wire         ci,
     output logic [15:0] y,
-    output wire         co
+    output wire         co,
+    output wire         so
 );
     wire sub = op == ALU_SUB;
     /* verilator lint_off UNUSEDSIGNAL */       // sum[0] is the carry-in position
@@ -185,9 +201,10 @@ module f1_alu
         ALU_OR:   y = x | s;
         ALU_XOR:  y = x ^ s;
         ALU_PASS: y = s;
-        ALU_SHL:  y = {x[14:0], 1'b0};
-        default:  y = {1'b0, x[15:1]};
+        ALU_SHL:  y = {x[14:0], ci};
+        default:  y = {ci, x[15:1]};
     endcase
+    assign so = op == ALU_SHL ? x[15] : x[0];
 endmodule
 
 // Skip conditions (isa.toml [[cond]]).

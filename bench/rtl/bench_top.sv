@@ -7,12 +7,15 @@
 //                LEDs. The benchmark programs store there when they finish.
 // With ROMA = 11, DEPTH = 256 and DA = 8 this is the standard skeleton harness, where cells
 // and Fmax are measured. The benchmark simulations use DA = 12 and DEPTH = 4096.
-// CORE: 1 = F1 barrel (N threads), 5 = F5 single thread (FWD = forwarding).
+// CORE: 1 = F1 barrel (N threads), 5 = F5 single thread (FWD = forwarding),
+//       0 = the CPU core itself (rtl/core/f1_core.sv, ISA 1.0 = r_f1 with X = 7), used only
+//       to check it against the kernels; its start-up hold is cut to 16 clocks.
 `default_nettype none
 module bench_top #(
     parameter int    CORE  = 1,
     parameter int    N     = 4,
     parameter bit    FWD   = 0,
+    parameter int    X     = 0,                     // F1 ISA study extensions (r_f1.sv, D-008)
     parameter int    ROMA  = 11,
     parameter int    DEPTH = 256,
     parameter int    DA    = 8,
@@ -40,8 +43,13 @@ module bench_top #(
     end
     always_ff @(posedge clk) if (dwe && &dwa) led <= dwd[4:0];
 
-    generate if (CORE == 1) begin : g_f1
-        r_f1 #(.N(N), .DA(DA)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd);
+    generate if (CORE == 0) begin : g_core
+        /* verilator lint_off PINCONNECTEMPTY */
+        f1_core #(.N(N), .DA(DA), .STARTUP(16)) cpu (.clk, .run(1'b1), .iaddr, .insn, .daddr,
+                                                    .dre(), .drd, .dwe, .dwa, .dwd);
+        /* verilator lint_on PINCONNECTEMPTY */
+    end else if (CORE == 1) begin : g_f1
+        r_f1 #(.N(N), .DA(DA), .X(X)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd);
     end else begin : g_f5
         r_f5 #(.FWD(FWD), .DA(DA)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd);
     end endgenerate

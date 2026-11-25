@@ -22,12 +22,19 @@
 //                         2 rd != 0, 3 rd < 0, 4 rd >= 0, 5 C clear, 6 C set, 7 rd odd
 //   1101 dddd ssss xxxx   jal: rd <- PC+1; PC <- rs
 //   111x x ttttttttttt    jump to t
+// ISA study (D-008): X switches on candidate extensions, each a bit:
+//   1  branch on C: jump bits 12..11 = 00 always (jmp), 01 if C set (bcs), 10 if C clear
+//      (bcc); the condition is resolved in S1 from the C read with the PC
+//   2  carry shifts: shl/shr set C to the bit shifted out; with rs = 1 they shift C in
+//      (rcl/rcr), else 0
+//   4  load/store offset: the address is rs + the 4-bit field in bits 3..0
 // Pipeline, thread t: S0 PC -> ROM read; S1 register reads, decode; S2 ALU, data access at
 // rs, next PC written back; S3 register write. N >= 4; no hazards or branch penalty.
 `default_nettype none
 module r_f1 #(
     parameter int  N  = 4,
     parameter int  DA = 8,                          // data address bits
+    parameter int  X  = 0,                          // ISA study extensions (above)
     localparam int TB = $clog2(N)
 ) (
     input  wire          clk,
@@ -71,7 +78,8 @@ module r_f1 #(
     logic [15:0]   xd, xs;
     logic [2:0]    op2, cc2;
     logic [1:0]    src2;                            // s = 0 rs, 1 sext(i), 2 {i, rd[7:0]}, 3 PC+1
-    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, cf2;
+    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, cf2, sh2, ci2;
+    logic [3:0]    off2;
     logic [3:0]    rd2;
     logic [10:0]   ins2, pc12, pc22;
     wire  [3:0]    cls = insn[15:12];
@@ -83,12 +91,15 @@ module r_f1 #(
         src2 <= !insn[15] ? 2'd1 : cls == 4'd8 ? 2'd0 : cls == 4'd11 ? 2'd2 : 2'd3;
         we2  <= !insn[15] | (cls == 4'd8 & !insn[3]) | cls == 4'd9 | cls == 4'd11 | cls == 4'd13;
         setc2 <= (!insn[15] & insn[14:13] == 2'd0) | (cls == 4'd8 & insn[2:1] == 2'd0);
+        sh2  <= X[1] & ((!insn[15] & insn[14:13] == 2'd3) | (cls == 4'd8 & insn[2:1] == 2'd3));
+        ci2  <= X[1] ? cls == 4'd8 & insn[4] : 1'b0;
+        off2 <= X[2] ? insn[3:0] : 4'd0;
         cf2  <= cf1;
         ld2  <= cls == 4'd9;
         st2  <= cls == 4'd10;
         sk2  <= cls == 4'd12;
         jal2 <= cls == 4'd13;
-        jmp2 <= insn[15:13] == 3'b111;
+        jmp2 <= insn[15:13] == 3'b111 & (!X[0] | insn[12:11] == 2'd0 | (insn[11] & cf1) | (insn[12] & !cf1));
         cc2  <= insn[2:0];
         rd2  <= insn[11:8];
         ins2 <= insn[10:0];
@@ -106,16 +117,18 @@ module r_f1 #(
     endcase
     wire [15:0] y;
     wire        co;
-    r_alu alu (.op(op2), .x(xd), .s, .y, .co);
+    wire        so;
+    r_alu alu (.op(op2), .x(xd), .s, .ci(X[1] ? ci2 & cf2 : 1'b0), .y, .co, .so);
     wire c;
     r_cond cnd (.v(xd), .cf(cf2), .cc(cc2), .t(c));
     wire [10:0] pcn = jmp2 ? ins2 : jal2 ? xs[10:0] : (sk2 & c) ? pc22 : pc12;
-    wire        cfn = setc2 ? co : cf2;
+    wire        cfn = setc2 ? co : (X[1] & sh2) ? so : cf2;
     always_ff @(posedge clk) pcm[th2] <= {cfn, pcn};
 
-    assign daddr = xs[DA-1:0];
+    wire [DA-1:0] ea = X[2] ? xs[DA-1:0] + DA'(off2) : xs[DA-1:0];
+    assign daddr = ea;
     assign dwe   = st2;
-    assign dwa   = xs[DA-1:0];
+    assign dwa   = ea;
     assign dwd   = xd;
 
     // ---- S3: register write -----------------------------------------------------------
