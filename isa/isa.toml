@@ -1,0 +1,265 @@
+# sloputron-1 instruction set: the single source for the written spec (docs/isa/isa.md),
+# the SystemVerilog constants (rtl/core/isa_pkg.sv) and the assembler (isa/asm.py).
+# Regenerate with `make isa` after any change. See isa/README.md.
+
+[isa]
+name    = "sloputron-1"
+version = "0.3"
+status  = "draft"
+summary = """
+A 16-bit, two-operand register instruction set for a 4-thread barrel processor (D-006).
+Every instruction is one 16-bit word. Each thread has its own 16 registers, PC and carry
+flag. Instructions are fetched from a word-addressed program ROM, and data is accessed
+with word loads and stores to a separate data space (a Harvard layout)."""
+history = """
+0.3 is the instruction set measured in Phase 3 as "v3" (`docs/phase3/benchmarks.md`). It is
+the two-operand set from the Phase 2 skeletons plus a carry flag, `cmp`, 8 skip
+conditions, wide data addresses and a thread number in r15. Nothing is final: changes are
+proposed with measurements and recorded as decisions."""
+
+word_bits    = 16
+pc_bits      = 11      # program ROM: 2048 words (4 KB)
+data_bits    = 12      # data space: 4096 words
+registers    = 16
+threads      = 4
+
+execution = """
+- **Threads.** 4 threads issue in strict rotation, one instruction per clock each. A
+  thread's next instruction starts only after its previous one has finished, so there are
+  no hazards, no delay slots and no branch penalty. One thread runs at a quarter of the
+  clock.
+- **Start-up.** At configuration every thread starts at address 0 with C = 0 and r15 =
+  its thread number (0–3). The other registers start undefined, and software must set them
+  before use. A thread separates itself from the others by testing r15.
+- **Data accesses** are 16-bit words at the address in rs (the low `data_bits` bits).
+  There are no byte loads.
+- **Carry flag C.** `add` and `sub` set it, in both the register and immediate forms, and
+  so does `cmp`. After `add`, C = carry out. After `sub` or `cmp`, C = 1 when rd ≥ rs or
+  imm, unsigned (no borrow). Every other instruction leaves C unchanged. `skip cc` and
+  `skip cs` test it.
+- **Immediates** are 8 bits, sign-extended in the ALU form: `li` loads −128..127. The
+  assembler also accepts 128..255 and stores the low 8 bits, so `li r1, 200` loads
+  0xFFC8. `ldhi` sets the high byte, so any 16-bit constant is `li` then `ldhi`.
+- **Calls.** `jal rd, rs` jumps to the address in rs and saves the return address (PC+1)
+  in rd. A return is `jal r0, rN`, which writes the address after the return into r0, so
+  r0 is a scratch register by convention.
+- **Skips** discard the next instruction when their condition holds. With a `jmp` after
+  them they make any conditional branch."""
+
+conventions = """
+- r15: thread number at start-up. Software may overwrite it.
+- r0: scratch. `jal` returns write it, and `nop` is `or r0, 0`.
+- Everything else is free. The Phase 3 kernels use r14 for a thread's data-region base."""
+
+open_items = """
+Measured proposals for later versions, not part of 0.3:
+- A 12-bit PC. The 11-bit PC limits programs to 4 KB, while F1 leaves up to 6 KB of BRAM
+  for code.
+- Unrolled kernels against code size (D-002's secondary metric).
+- A multiply step or shift-by-N, if mul16 or crc16 pay for its cells.
+- Load/store with an offset, if sort or memcpy pay for the adder.
+- Generated customasm rules and C decode tables (planned in CLAUDE.md). customasm is not in
+  the pinned toolchain, so the assembler is `isa/asm.py`, driven by this file."""
+
+# ---- formats: bit patterns, MSB first. Letters are fields, - is ignored (write 0) ----------
+# d rd, s rs, o ALU op, w no-write, i imm8, c condition, t jump target
+[formats.alu_imm]
+pattern = "0ooo dddd iiii iiii"
+title   = "ALU, immediate"
+[formats.alu_reg]
+pattern = "1000 dddd ssss wooo"
+title   = "ALU, register"
+[formats.load]
+pattern = "1001 dddd ssss ----"
+title   = "Load"
+[formats.store]
+pattern = "1010 dddd ssss ----"
+title   = "Store"
+[formats.ldhi]
+pattern = "1011 dddd iiii iiii"
+title   = "Load high byte"
+[formats.skip]
+pattern = "1100 dddd ---- -ccc"
+title   = "Skip"
+[formats.jal]
+pattern = "1101 dddd ssss ----"
+title   = "Jump and link"
+[formats.jmp]
+pattern = "111- -ttt tttt tttt"
+title   = "Jump"
+
+# ---- ALU operations (field o). x = rd, s = rs or sext(imm8) ---------------------------------
+[[alu]]
+code = 0
+name = "add"
+op   = "x + s"
+carry = "carry out"
+[[alu]]
+code = 1
+name = "sub"
+op   = "x − s"
+carry = "1 if x ≥ s (unsigned)"
+[[alu]]
+code = 2
+name = "and"
+op   = "x & s"
+[[alu]]
+code = 3
+name = "or"
+op   = "x | s"
+[[alu]]
+code = 4
+name = "xor"
+op   = "x ^ s"
+[[alu]]
+code = 5
+name = "pass"
+op   = "s"
+[[alu]]
+code = 6
+name = "shl"
+op   = "x << 1"
+[[alu]]
+code = 7
+name = "shr"
+op   = "x >> 1 (logical)"
+
+# ---- skip conditions (field c) --------------------------------------------------------------
+[[cond]]
+code = 0
+name = "al"
+test = "always"
+[[cond]]
+code = 1
+name = "z"
+test = "rd = 0"
+[[cond]]
+code = 2
+name = "nz"
+test = "rd ≠ 0"
+[[cond]]
+code = 3
+name = "neg"
+test = "rd < 0 (bit 15 set)"
+[[cond]]
+code = 4
+name = "nneg"
+test = "rd ≥ 0 (bit 15 clear)"
+[[cond]]
+code = 5
+name = "cc"
+test = "C clear (after cmp: rd < rs, unsigned)"
+[[cond]]
+code = 6
+name = "cs"
+test = "C set (after cmp: rd ≥ rs, unsigned)"
+[[cond]]
+code = 7
+name = "odd"
+test = "rd bit 0 set"
+
+# ---- mnemonics ------------------------------------------------------------------------------
+# Each form: format, operand syntax, fixed field values. Operands: rd rs (registers),
+# [rs] (register in brackets), imm (8-bit value or label), cond (condition name),
+# target (jump label or address). The assembler picks the first form whose syntax matches.
+[[insn]]
+name = "add"
+desc = "rd ← rd + rs / sext(imm); C ← carry"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 0 } },
+         { format = "alu_imm", syntax = "rd, imm", set = { o = 0 } }]
+[[insn]]
+name = "sub"
+desc = "rd ← rd − rs / sext(imm); C ← no borrow"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 1 } },
+         { format = "alu_imm", syntax = "rd, imm", set = { o = 1 } }]
+[[insn]]
+name = "cmp"
+desc = "C ← rd ≥ rs (unsigned); rd unchanged"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 1, w = 1 } }]
+[[insn]]
+name = "and"
+desc = "rd ← rd & rs / sext(imm)"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 2 } },
+         { format = "alu_imm", syntax = "rd, imm", set = { o = 2 } }]
+[[insn]]
+name = "or"
+desc = "rd ← rd | rs / sext(imm)"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 3 } },
+         { format = "alu_imm", syntax = "rd, imm", set = { o = 3 } }]
+[[insn]]
+name = "xor"
+desc = "rd ← rd ^ rs / sext(imm)"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 4 } },
+         { format = "alu_imm", syntax = "rd, imm", set = { o = 4 } }]
+[[insn]]
+name = "mov"
+desc = "rd ← rs"
+forms = [{ format = "alu_reg", syntax = "rd, rs", set = { o = 5 } }]
+[[insn]]
+name = "li"
+desc = "rd ← sext(imm)"
+forms = [{ format = "alu_imm", syntax = "rd, imm", set = { o = 5 } }]
+[[insn]]
+name = "shl"
+desc = "rd ← rd << 1"
+forms = [{ format = "alu_reg", syntax = "rd", set = { o = 6 } }]
+[[insn]]
+name = "shr"
+desc = "rd ← rd >> 1 (logical)"
+forms = [{ format = "alu_reg", syntax = "rd", set = { o = 7 } }]
+[[insn]]
+name = "nop"
+desc = "no effect (or r0, 0)"
+forms = [{ format = "alu_imm", syntax = "", set = { o = 3 } }]
+[[insn]]
+name = "ld"
+desc = "rd ← D[rs]"
+forms = [{ format = "load", syntax = "rd, [rs]" }]
+[[insn]]
+name = "st"
+desc = "D[rs] ← rd"
+forms = [{ format = "store", syntax = "rd, [rs]" }]
+[[insn]]
+name = "ldhi"
+desc = "rd ← {imm, rd[7:0]}"
+forms = [{ format = "ldhi", syntax = "rd, imm" }]
+[[insn]]
+name = "skip"
+desc = "skip the next instruction if cond (rd is needed only by z, nz, neg, nneg, odd)"
+forms = [{ format = "skip", syntax = "cond, rd" },
+         { format = "skip", syntax = "cond" }]
+[[insn]]
+name = "jal"
+desc = "rd ← PC + 1; PC ← rs"
+forms = [{ format = "jal", syntax = "rd, rs" }]
+[[insn]]
+name = "jmp"
+desc = "PC ← target"
+forms = [{ format = "jmp", syntax = "target" }]
+
+# ---- data address space ---------------------------------------------------------------------
+[memory]
+description = """
+Data addresses are 12 bits (4096 words). RAM starts at 0 and its size is set by the board
+design. The I/O region is 0x800–0xFFF and is decoded from address bit 11 and bits 1..0
+(D-007), so its other addresses repeat the four registers below and are reserved."""
+[[memory.io]]
+addr = 0xFFC
+name = "UART_TX"
+access = "W"
+desc = "send the low byte; ignored while the transmitter is busy"
+[[memory.io]]
+addr = 0xFFD
+name = "UART_STATUS"
+access = "R"
+desc = "bit 0: transmitter busy; bit 1: received byte waiting"
+[[memory.io]]
+addr = 0xFFE
+name = "UART_RX"
+access = "R"
+desc = "the received byte (bits 7..0); reading clears 'byte waiting'"
+[[memory.io]]
+addr = 0xFFF
+name = "LED"
+access = "W"
+desc = "the 5 LEDs from bits 4..0"

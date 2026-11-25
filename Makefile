@@ -32,11 +32,22 @@ D      ?= blinky
 NOTE   ?=
 
 # ---- design registry: top module = design name ---------------------------------
-DESIGNS := blinky uart_echo
+DESIGNS := blinky uart_echo sloputron
 
 blinky_SRC    := rtl/board/blinky.sv
 uart_echo_SRC := rtl/board/uart_echo.sv rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
 uart_echo_TB  := sim/uart_echo_tb.sv
+
+# The CPU (D-006, D-007): F1 core + ROM + RAM + hardware UART, running programs/demo.s
+sloputron_SRC := rtl/core/isa_pkg.sv rtl/core/f1_core.sv rtl/board/sloputron.sv \
+                 rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
+sloputron_TB  := sim/sloputron_tb.sv
+$(B)/sloputron/synth.json sim-sloputron: $(B)/programs/demo.hex
+
+# Programs: programs/NAME.s -> build/programs/NAME.hex (+ .lst), by the spec-driven assembler
+$(B)/programs/%.hex: programs/%.s isa/isa.toml isa/isa.py isa/asm.py
+	@mkdir -p $(@D)
+	python3 isa/asm.py $< -o $@ --list $(@:.hex=.lst) > /dev/null
 
 # ---- units: shared RTL with its own testbench, linted and simulated but not built ------
 UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4 skel_f5 r_f1 r_f5
@@ -70,13 +81,15 @@ PNR_FLAGS := --hx1k --package tq144 --pcf $(PCF) --freq $(FREQ) --timing-allow-f
 VWARN     := -Wall -Wno-DECLFILENAME -Wno-PROCASSINIT
 VSIMFLAGS := $(VWARN) -Wno-UNUSEDSIGNAL -Wno-ZERODLY --binary --timing -j 0
 
-.PHONY: help all bits bit prog sweep report check sim lint uart-test toolchain versions clean
+.PHONY: help all bits bit prog sweep report check sim lint uart-test isa isa-test toolchain versions clean
 help:
 	@echo "make bits                  bitstreams for all designs -> build/<design>.bin (seed $(SEED))"
 	@echo "make bit  D=uart_echo      one bitstream"
 	@echo "make prog D=uart_echo      flash it with iceprog (board on this machine)"
 	@echo "make uart-test PORT=...    loopback test against uart_echo on the board"
-	@echo "make sim                   self-checking Verilator testbenches"
+	@echo "make sim                   self-checking Verilator testbenches (runs isa-test first)"
+	@echo "make isa                   regenerate docs/isa/isa.md and rtl/core/isa_pkg.sv from isa/isa.toml"
+	@echo "make isa-test              generated ISA files up to date + assembler round-trip test"
 	@echo "make lint                  Verilator lint of every design"
 	@echo "make sweep                 $(SEEDS)-seed nextpnr sweep of every design"
 	@echo "make report NOTE='...'     sweep + append rows to results.csv (do this before committing hardware changes)"
@@ -124,7 +137,15 @@ check: $(DESIGNS:%=$(B)/%/sweep.json)
 
 # ---- simulation and lint --------------------------------------------------------
 SIM_DESIGNS := $(foreach d,$(DESIGNS),$(if $($(d)_TB),$(d)))
-sim: $(SIM_DESIGNS:%=sim-%) $(UNITS:%=sim-%)
+sim: isa-test $(SIM_DESIGNS:%=sim-%) $(UNITS:%=sim-%)
+
+# ---- instruction set (isa/isa.toml is the source) -------------------------------------
+isa:
+	python3 isa/gen.py
+
+isa-test:
+	python3 isa/gen.py --check
+	python3 isa/test_isa.py
 sim-%:
 	@mkdir -p $(B)/sim/$*
 	verilator $(VSIMFLAGS) --top-module $*_tb -Mdir $(B)/sim/$* $($*_TB) $($*_SRC) > $(B)/sim-$*.log 2>&1 \
