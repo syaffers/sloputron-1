@@ -1,13 +1,17 @@
 // ALU and skip conditions for the two-operand register ISA, v3 (F1 and F5; D-005).
 // The ALU is skel_alu plus a carry out. add and sub copy it into the core's carry flag C:
 // after add, C = carry; after sub (or cmp), C = 1 when x >= s unsigned (no borrow).
+// ci is the bit a shift brings in (0 in v3; the ISA study's carry shifts, D-008, feed C).
+// so is the bit a shift drops: x[15] for shl, x[0] for shr.
 `default_nettype none
 module r_alu (
     input  wire  [2:0]  op,                     // add sub and or xor pass shl shr
     input  wire  [15:0] x,
     input  wire  [15:0] s,
+    input  wire         ci,
     output logic [15:0] y,
-    output wire         co
+    output wire         co,
+    output wire         so
 );
     wire sub = op == 3'd1;
     /* verilator lint_off UNUSEDSIGNAL */       // sum[0] is the carry-in position
@@ -20,9 +24,10 @@ module r_alu (
         3'd3: y = x | s;
         3'd4: y = x ^ s;
         3'd5: y = s;
-        3'd6: y = {x[14:0], 1'b0};
-        default: y = {1'b0, x[15:1]};
+        3'd6: y = {x[14:0], ci};
+        default: y = {ci, x[15:1]};
     endcase
+    assign so = op[0] ? x[0] : x[15];
 endmodule
 
 // cc: 0 always, 1 rd == 0, 2 rd != 0, 3 rd < 0, 4 rd >= 0, 5 C clear, 6 C set, 7 rd odd.

@@ -1,9 +1,14 @@
 name,design,harness,threads,lc,brams,luts,carries,ffs,fmax_median,fmax_worst,seeds
-f1_n4,"F1 barrel, 4 threads",score,4,336,12,272,33,106,89.97,87.06,16
+f1_n4,"F1 barrel, 4 threads",score,4,336,12,272,33,106,92.21,87.7,16
 f1_n8,"F1 barrel, 8 threads",score,8,349,12,280,34,110,89.97,86.64,16
 f5,"F5 single, stalls",score,1,338,11,296,25,74,84.11,74.29,16
 f5_fwd,"F5 single, forwarding",score,1,377,11,335,25,76,76.65,69.62,16
-fit_f1_n4,"F1 barrel, 4 threads",fit,4,402,10,335,33,109,89.55,84.34,16
+fit_f1_n4,"F1 barrel, 4 threads",fit,4,410,10,343,33,109,91.53,84.74,16
 fit_f1_n8,"F1 barrel, 8 threads",fit,8,484,14,411,34,114,88.46,82.16,16
 fit_f5,"F5 single, stalls",fit,1,334,6,292,25,74,88.43,79.77,16
 fit_f5_fwd,"F5 single, forwarding",fit,1,377,6,335,25,76,78.38,73.99,16
+f1x1,F1 4 threads + branch on C,score,4,338,12,275,33,106,95.57,90.25,16
+f1x2,F1 4 threads + carry shifts,score,4,350,12,286,33,108,89.5,86.27,16
+f1x3,F1 4 threads + both,score,4,348,12,285,33,108,93.2,90.77,16
+f1x7,F1 4 threads + both + ld/st offset,score,4,354,12,291,40,108,95.41,91.82,16
+fit_f1x7,F1 4 threads + both + ld/st offset,fit,4,421,10,355,43,111,90.14,87.12,16

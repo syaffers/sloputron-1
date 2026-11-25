@@ -4,8 +4,9 @@
 1. Every 16-bit word either disassembles to text that assembles back to the same word,
    or is not canonical (prints as .word): an ignored bit set, or a field combination no
    mnemonic uses.
-2. The Phase 3 kernels (bench/kernels.py, built by a separate hand-written encoder)
-   disassemble to canonical text and assemble back to the same words.
+2. The Phase 3 kernels (bench/kernels.py, built by a separate hand-written encoder), in
+   the 0.3 subset (X = 0) and with every 1.0 extension (X = 15, D-008), disassemble to
+   canonical text and assemble back to the same words.
 3. Small syntax checks: labels, .equ, .org, .word, .ascii, lo/hi, I/O names, errors.
 """
 import os, sys
@@ -31,7 +32,8 @@ def main():
     n = 0
     for name, gen in kernels.KERNELS.items():     # (the random hazard test uses shl/shr
                                                   # with a non-zero rs field, not canonical)
-        for w in gen():
+      for x in (0, 15):
+        for w in gen(x):
             text = spec.disassemble(w)
             assert not text.startswith(".word"), (name, hex(w))
             assert spec.assemble(text)[0] == {0: w}, (name, hex(w), text)
@@ -49,6 +51,11 @@ def main():
         skip  z, r3
         ld    r4, [r1]
         st    r4, [ r2 ]
+        ld    r4, [r1+15]
+        st    r4, [r2 + K]
+        rcl   r3
+        bcc   start
+        bcs   table
         li    r5, UART_TX & 0xff
         jal   r0, r5
         jmp   start
@@ -63,16 +70,27 @@ def main():
     assert words[0] == 0x5120 and words[1] == 0xB100, (hex(words[0]), hex(words[1]))
     assert words[2] == 0x01FF and words[3] == 0x8120, (hex(words[2]), hex(words[3]))
     assert words[4] == 0x8129 and words[5] == 0xC006 and words[6] == 0xC301
-    assert words[9] == 0x55FC and words[11] == 0xE000 and words[12] == 0x3000
+    assert [words[a] for a in range(9, 14)] == [0x941F, 0xA423, 0x8316, 0xF000, 0xE820], \
+        [hex(words[a]) for a in range(9, 14)]
+    assert words[14] == 0x55FC and words[16] == 0xE000 and words[17] == 0x3000
     assert [words[a] for a in range(0x20, 0x26)] == [1, 0x41, 0xFFFF, 0x68, 0x69, 0x0A]
     for bad in ("add r1", "add r1, 300", "ld r1, r2", "skip zz, r1", "jmp nowhere",
-                "foo r1", "add r16, r1", "jmp 0x800"):
+                "foo r1", "add r16, r1", "jmp 0x800", "ld r1, [r2+16]", "st r1, [r2-1]",
+                "rcl r1, r2"):
         try:
             spec.assemble(bad)
         except AsmError:
             continue
         raise AssertionError(f"accepted: {bad}")
-    print(f"isa: {canonical} canonical encodings round-trip; {n} kernel words match; syntax OK")
+    # The instruction-set simulator runs the board demo: banner with thread 2's crc, then echo
+    from iss import Board
+    words, _ = spec.assemble(open(os.path.join(os.path.dirname(HERE), "programs", "demo.s")).read())
+    b = Board(words, spec)
+    b.rx += b"ok"
+    b.run(60_000)
+    assert bytes(b.tx) == b"sloputron-1 crc16=29B1\r\nok", bytes(b.tx)
+    print(f"isa: {canonical} canonical encodings round-trip; {n} kernel words match; syntax OK; "
+          "ISS runs the demo")
 
 
 if __name__ == "__main__":

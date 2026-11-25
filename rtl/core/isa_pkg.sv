@@ -1,4 +1,4 @@
-// sloputron-1 ISA 0.3 constants. Generated from isa/isa.toml by isa/gen.py;
+// sloputron-1 ISA 1.0 constants. Generated from isa/isa.toml by isa/gen.py;
 // do not edit. Decode an instruction class with (insn & FMT_x_MASK) == FMT_x_MATCH.
 `default_nettype none
 /* verilator lint_off UNUSEDPARAM */           // a design uses only some constants

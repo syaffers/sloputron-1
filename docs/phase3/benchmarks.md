@@ -20,6 +20,10 @@ seeds 1..16, measured on linux-aarch64. Regenerate with `bench/run.py` (about 35
 | F5, stalls | 338 | 84.1 / 74.3 | 13,292 | 23,427 | 17,747 | 119,810 | 28,526 |
 | F5, forwarding | 377 | 76.7 / 69.6 | 12,590 | 19,514 | 15,810 | 112,329 | 25,701 |
 
+These are the figures behind D-006. The D-008 run re-measured F1 with 4 threads at 92.2 MHz
+(38,295), the same cells and cycles. Only the placement changed (see "ISA 1.0" below).
+`bench/bench.csv` and `bench/score.csv` now hold that row.
+
 Each kernel column is iterations/s per 1000 cells: copies × Fmax median ÷ cycles ÷ cells. A
 barrel runs N copies at once (D-004). Cells are the core in the standard skeleton harness
 (D-005 decision 4), the same measurement as Phase 2.
@@ -125,8 +129,67 @@ chip: at most 14 of 16 BRAMs and 484 of 1,280 cells.
     instruction) and loads used at once.
   - 13 broken variants of the v3 cores all fail.
 
+## ISA 1.0: the instruction set for F1 alone (D-008)
+
+After D-006 the instruction set no longer had to suit F5. Three extensions were tried on
+F1 with 4 threads, each in encoding space that v3 left unused:
+- **B**, branch on C (`bcc`, `bcs`);
+- **S**, carry shifts (`shl`/`shr` set C, and `rcl`/`rcr` shift it in);
+- **O**, a 4-bit load/store offset.
+
+They are switched on by `X` in `bench/rtl/r_f1.sv`, and `bench/kernels.py` writes each
+kernel to use what X provides. Same toolchain, 16 seeds. The v3 core was re-measured in
+the same run, and these rows replace its row in `bench/bench.csv`.
+
+| Variant | Cells | Fmax median / worst | crc16 | sort | mul16 | memcpy | **Geometric mean** |
+|---|---:|---|---:|---:|---:|---:|---:|
+| v3 (0.3) | 336 | 92.2 / 87.7 | 18,520 | 31,736 | 24,100 | 151,831 | **38,295** |
+| + B | 338 | 95.6 / 90.2 | 22,139 | 33,177 | 27,281 | 182,127 | 43,708 |
+| + S | 350 | 89.5 / 86.3 | 20,024 | 29,571 | 30,015 | 141,474 | 39,821 |
+| + B + S | 348 | 93.2 / 90.8 | 24,975 | 31,425 | 35,725 | 172,506 | 46,896 |
+| **+ B + S + O = 1.0** | **354** | **95.4 / 91.8** | 25,134 | 35,442 | 36,577 | 173,604 | **48,768** |
+| 1.0, unrolled kernels | 354 | 95.4 / 91.8 | 42,301 | 35,442 | 51,274 | 411,167 | 74,980 |
+
+- **The unchanged v3 core measured 92.2 MHz this time,** against 90.0 MHz before. Only
+  wire names changed, which moves the placement. So Fmax differences of about ±3% between
+  these rows are noise. Work per clock per cell, which leaves Fmax out, is:
+  - B: 1.10;
+  - S: 1.07;
+  - B + S: 1.21;
+  - 1.0: **1.23** (all against v3).
+- **B** saves one instruction per counted loop. Count up from −n: `add rN, 1` then `bcc`.
+- **S** shortens crc16's bit loop. It also turns mul16 into a right-shifting multiply
+  through the carry.
+- **O** helps sort (the hole is always j + 1) and unrolled copies. On the board's 12-bit
+  data addresses it costs 11 cells, not 6 (`fit_f1x7` in `bench/bench.csv`: 421, against
+  410).
+
+Cycles for all four copies (instructions per copy = cycles ÷ 4):
+
+| Kernel | v3 | + B | + S | + B + S | 1.0 | 1.0 unrolled |
+|---|---:|---:|---:|---:|---:|---:|
+| crc16 | 59,274 | 51,086 | 51,082 | 42,894 | 42,894 | 25,486 |
+| sort | 34,590 | 34,090 | 34,590 | 34,090 | 30,418 | 30,418 |
+| mul16 | 45,550 | 41,458 | 34,078 | 29,986 | 29,474 | 21,026 |
+| memcpy | 7,230 | 6,210 | 7,230 | 6,210 | 6,210 | 2,622 |
+
+**Code size:**
+- 1.0, rolled: crc16 31 words, sort 32, mul16 33, memcpy 23. That is 119 in all, against
+  138 for v3.
+- Unrolled: 222 words. The unrolled kernels are crc16's 8 bits, mul16's 16 bits and
+  memcpy 8 words per pass; sort has no fixed-count inner loop.
+
+The scored kernels stay rolled (D-008 decision 5).
+
+**Checks:**
+- Every variant's kernels match the reference interpreter and the D-002 check values.
+- The hazard program draws extra cases for each extension.
+- 9 mutants of the new logic were all caught: an inverted or always-taken branch, `rcl`/`rcr`
+  ignoring C or reading another thread's C, the shift-out bit swapped, shifts leaving C,
+  an offset ignored on a load or a store, and the offset read from the wrong field.
+- `rtl/core/f1_core.sv` runs the same kernels with every extension (`make sim-f1_core`).
+
 ## Next
 - **Decided:** [D-006](../decisions/D-006-commit-f1.md) commits to F1 with 4 threads.
-- **Unroll the inner loops** (crc16's and mul16's bit loops). This trades code size for
-  speed, and D-002 tracks code size as the secondary metric. It helps both cores about
-  equally.
+- **Decided:** [D-008](../decisions/D-008-isa-1.0.md), ISA 1.0 for F1. Unrolled kernels are
+  measured above and reported, not scored.

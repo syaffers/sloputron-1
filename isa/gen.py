@@ -9,10 +9,10 @@ import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-from isa import FIELD_FOR, Spec  # noqa: E402
+from isa import Spec, fields_of  # noqa: E402
 
 FIELD_NAME = {"d": "rd", "s": "rs", "o": "op", "w": "w (1 = no write)", "i": "imm8",
-              "c": "cond", "t": "target"}
+              "c": "cond", "t": "target", "k": "offset", "b": "branch (0 always, 1 C set, 2 C clear)"}
 
 
 def esc(s):
@@ -62,7 +62,7 @@ def markdown(spec):
             fixed = ", ".join(f"{FIELD_NAME[f].split(' ')[0]} = {v}" for f, v in form.get("set", {}).items())
             f = spec.formats[form["format"]]
             unused = [x for x in f.fields if x not in form.get("set", {}) and
-                      x not in {FIELD_FOR[t] for t in spec._syntax(form["syntax"])}]
+                      x not in fields_of(spec._syntax(form["syntax"]))]
             if unused:
                 fixed = ", ".join(filter(None, [fixed, ", ".join(f"{FIELD_NAME[x].split(' ')[0]} = 0" for x in unused)]))
             desc = esc(ins["desc"]) if k == 0 else "″"

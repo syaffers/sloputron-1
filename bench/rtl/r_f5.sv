@@ -68,7 +68,9 @@ module r_f5 #(parameter bit FWD = 1, parameter int DA = 8) (
     endcase
     wire [15:0] y;
     wire        co;
-    r_alu alu (.op(e_op), .x(xdf), .s, .y, .co);
+    /* verilator lint_off PINCONNECTEMPTY */
+    r_alu alu (.op(e_op), .x(xdf), .s, .ci(1'b0), .y, .co, .so());
+    /* verilator lint_on PINCONNECTEMPTY */
     wire c;
     r_cond cnd (.v(xdf), .cf, .cc(e_cc), .t(c));
     wire kill = e_jal | (e_sk & c);                 // discard the instruction in D

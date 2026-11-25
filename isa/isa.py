@@ -9,7 +9,8 @@ Library use:
 Assembly syntax (one instruction per line):
     label:                       a label is the address of the next word
     add  r1, r2                  register form;  add r1, -1   immediate form
-    ld   r1, [r2]                st r1, [r2]
+    ld   r1, [r2]                st r1, [r2+3]       offset 0..15
+    bcc  loop                    bcs done            branch on the carry flag
     skip z, r3                   skip cs
     jmp  loop                    jal r5, r8
     li   r1, lo(msg)             ldhi r1, hi(msg)
@@ -24,7 +25,12 @@ The I/O register names from the spec (UART_TX, ...) are predefined.
 import os, re, tomllib
 
 SPEC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "isa.toml")
-FIELD_FOR = {"rd": "d", "rs": "s", "[rs]": "s", "imm": "i", "cond": "c", "target": "t"}
+# syntax token -> the field letters it fills ("[rs+k]" fills two)
+FIELD_FOR = {"rd": "d", "rs": "s", "[rs+k]": "sk", "imm": "i", "cond": "c", "target": "t"}
+
+
+def fields_of(tokens):
+    return set().union(*(FIELD_FOR[t] for t in tokens)) if tokens else set()
 
 
 class AsmError(Exception):
@@ -101,7 +107,7 @@ class Spec:
                 if form["format"] != f.name:
                     continue
                 toks = self._syntax(form["syntax"])
-                free = {FIELD_FOR[t] for t in toks}
+                free = fields_of(toks)
                 fixed = form.get("set", {})
                 if all(vals[k] == fixed.get(k, vals[k] if k in free else 0) for k in vals):
                     ops = [self._operand_text(t, vals, f, labels) for t in toks]
@@ -109,11 +115,11 @@ class Spec:
         return f".word {w:#06x}"
 
     def _operand_text(self, tok, vals, f, labels):
+        if tok == "[rs+k]":
+            return f"[r{vals['s']}+{vals['k']}]" if vals["k"] else f"[r{vals['s']}]"
         v = vals[FIELD_FOR[tok]]
         if tok == "rd" or tok == "rs":
             return f"r{v}"
-        if tok == "[rs]":
-            return f"[r{v}]"
         if tok == "cond":
             return self.cond_name[v]
         if tok == "target":
@@ -234,7 +240,8 @@ class Spec:
                 f = self.formats[form["format"]]
                 vals = dict(form.get("set", {}))
                 for tok, arg in zip(toks, args):
-                    vals[FIELD_FOR[tok]] = self._operand(tok, arg, f, env, pass_no)
+                    v = self._operand(tok, arg, f, env, pass_no)
+                    vals.update(zip(FIELD_FOR[tok], v if isinstance(v, tuple) else (v,)))
                 return f.encode(vals)
             except AsmError as e:
                 errors.append(str(e))
@@ -246,11 +253,14 @@ class Spec:
             if not reg or int(reg.group(1)) >= self.isa["registers"]:
                 raise AsmError(f"'{arg}' is not a register")
             return int(reg.group(1))
-        if tok == "[rs]":
-            m = re.fullmatch(r"\[\s*r(\d+)\s*\]", arg.lower())
+        if tok == "[rs+k]":                                 # [rN] or [rN + offset]
+            m = re.fullmatch(r"\[\s*r(\d+)\s*(?:\+(.+))?\]", arg.strip(), re.I)
             if not m or int(m.group(1)) >= self.isa["registers"]:
-                raise AsmError(f"'{arg}' is not [register]")
-            return int(m.group(1))
+                raise AsmError(f"'{arg}' is not [register] or [register+offset]")
+            k = self._eval(m.group(2), env, pass_no) if m.group(2) else 0
+            if not 0 <= k < 1 << f.width("k"):
+                raise AsmError(f"offset {k} out of range 0..{(1 << f.width('k')) - 1}")
+            return int(m.group(1)), k
         if tok == "cond":
             if arg.lower() not in self.cond:
                 raise AsmError(f"'{arg}' is not a condition")

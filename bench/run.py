@@ -18,7 +18,8 @@ import argparse, collections, csv, json, os, random, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RTL = [os.path.join(ROOT, "bench", "rtl", f) for f in
-       ("bench_top.sv", "r_alu.sv", "r_f1.sv", "r_f5.sv")]
+       ("bench_top.sv", "r_alu.sv", "r_f1.sv", "r_f5.sv")] + \
+      [os.path.join(ROOT, "rtl", "core", f) for f in ("isa_pkg.sv", "f1_core.sv")]
 PCF = os.path.join(ROOT, "board", "icestick.pcf")
 BUILD = os.path.join(ROOT, "build", "bench", "synth")
 SWEEP = os.path.join(ROOT, "scripts", "pnr_sweep.py")
@@ -26,16 +27,21 @@ TOOLS = os.path.join(ROOT, "tools", "oss-cad-suite", "bin")   # the pinned toolc
 if os.path.isdir(TOOLS):
     os.environ["PATH"] = TOOLS + os.pathsep + os.environ["PATH"]
 
-# name, design, core, threads, forwarding, harness
+# name, design, core, threads, forwarding, harness, ISA study extensions X (D-008)
 VARIANTS = [
-    ("f1_n4",       "F1 barrel, 4 threads", 1, 4, 0, "score"),
-    ("f1_n8",       "F1 barrel, 8 threads", 1, 8, 0, "score"),
-    ("f5",          "F5 single, stalls",    5, 1, 0, "score"),
-    ("f5_fwd",      "F5 single, forwarding", 5, 1, 1, "score"),
-    ("fit_f1_n4",   "F1 barrel, 4 threads", 1, 4, 0, "fit"),
-    ("fit_f1_n8",   "F1 barrel, 8 threads", 1, 8, 0, "fit"),
-    ("fit_f5",      "F5 single, stalls",    5, 1, 0, "fit"),
-    ("fit_f5_fwd",  "F5 single, forwarding", 5, 1, 1, "fit"),
+    ("f1_n4",       "F1 barrel, 4 threads", 1, 4, 0, "score", 0),
+    ("f1_n8",       "F1 barrel, 8 threads", 1, 8, 0, "score", 0),
+    ("f5",          "F5 single, stalls",    5, 1, 0, "score", 0),
+    ("f5_fwd",      "F5 single, forwarding", 5, 1, 1, "score", 0),
+    ("fit_f1_n4",   "F1 barrel, 4 threads", 1, 4, 0, "fit", 0),
+    ("fit_f1_n8",   "F1 barrel, 8 threads", 1, 8, 0, "fit", 0),
+    ("fit_f5",      "F5 single, stalls",    5, 1, 0, "fit", 0),
+    ("fit_f5_fwd",  "F5 single, forwarding", 5, 1, 1, "fit", 0),
+    ("f1x1",        "F1 4 threads + branch on C", 1, 4, 0, "score", 1),
+    ("f1x2",        "F1 4 threads + carry shifts", 1, 4, 0, "score", 2),
+    ("f1x3",        "F1 4 threads + both", 1, 4, 0, "score", 3),
+    ("f1x7",        "F1 4 threads + both + ld/st offset", 1, 4, 0, "score", 7),
+    ("fit_f1x7",    "F1 4 threads + both + ld/st offset", 1, 4, 0, "fit", 7),
 ]
 HARNESS = dict(score=dict(ROMA=11, DEPTH=256, DA=8), fit=dict(ROMA=9, DA=12))
 
@@ -47,14 +53,14 @@ def random_hex(path, n, seed):
             f.write(f"{rng.getrandbits(16):04x}\n")
 
 
-def build(name, core, n, fwd, harness, seeds, jobs):
+def build(name, core, n, fwd, harness, x, seeds, jobs):
     d = os.path.join(BUILD, name)
     os.makedirs(d, exist_ok=True)
     h = dict(HARNESS[harness])
     h.setdefault("DEPTH", 256 * (n + 1))
     random_hex(os.path.join(d, "skel_rom.hex"), 2 ** h["ROMA"], 1)
     random_hex(os.path.join(d, "skel_ram.hex"), h["DEPTH"], 2)
-    g = " ".join(f"-G {k}={v}" for k, v in dict(CORE=core, N=n, FWD=fwd, **h).items())
+    g = " ".join(f"-G {k}={v}" for k, v in dict(CORE=core, N=n, FWD=fwd, X=x, **h).items())
     net = os.path.join(d, "synth.json")
     subprocess.run(["yosys", "-q", "-m", "slang", "-l", os.path.join(d, "yosys.log"), "-p",
                     f"read_slang {' '.join(RTL)} {g} --top bench_top; "
@@ -86,10 +92,10 @@ def main():
     if os.path.exists(a.csv):
         old = {r["name"]: r for r in csv.DictReader(open(a.csv))}
     new = {}
-    for name, fin, core, n, fwd, harness in VARIANTS:
+    for name, fin, core, n, fwd, harness, x in VARIANTS:
         if a.only and not any(name == o or name.startswith(o + "_") for o in a.only):
             continue
-        r = build(name, core, n, fwd, harness, a.seeds, a.jobs)
+        r = build(name, core, n, fwd, harness, x, a.seeds, a.jobs)
         assert r["ram"] == r["yosys_brams"], (name, r["ram"], r["yosys_brams"])
         new[name] = (dict(name=name, design=fin, harness=harness, threads=n, lc=r["lc"], brams=r["ram"],
                          luts=r["luts"], carries=r["carries"], ffs=r["ffs"],

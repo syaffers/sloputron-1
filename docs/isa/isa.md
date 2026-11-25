@@ -1,4 +1,4 @@
-# sloputron-1 instruction set, version 0.3 (draft)
+# sloputron-1 instruction set, version 1.0 (final for F1, D-008)
 
 *Generated from `isa/isa.toml` by `isa/gen.py`. Edit the TOML, then run `make isa`.*
 
@@ -7,10 +7,16 @@ Every instruction is one 16-bit word. Each thread has its own 16 registers, PC a
 flag. Instructions are fetched from a word-addressed program ROM, and data is accessed
 with word loads and stores to a separate data space (a Harvard layout).
 
-0.3 is the instruction set measured in Phase 3 as "v3" (`docs/phase3/benchmarks.md`). It is
-the two-operand set from the Phase 2 skeletons plus a carry flag, `cmp`, 8 skip
-conditions, wide data addresses and a thread number in r15. Nothing is final: changes are
-proposed with measurements and recorded as decisions.
+0.3 was the set measured in Phase 3 as "v3" (`docs/phase3/benchmarks.md`): the two-operand
+set from the Phase 2 skeletons plus a carry flag, `cmp`, 8 skip conditions, wide data
+addresses and a thread number in r15. 1.0 (D-008) is the set for F1 alone. It adds three
+measured extensions, each in encoding space that 0.3 left unused:
+- branch on C (`bcc`, `bcs`) in the jump's spare bits;
+- carry shifts: `shl`/`shr` set C to the bit shifted out, and `rcl`/`rcr` shift C in;
+- a 4-bit offset on `ld` and `st`.
+
+Together they give 1.23× the work per clock per cell on the D-002 kernels. 0.3 programs
+assemble unchanged; only code that kept C across a shift behaves differently.
 
 Word: 16 bits. Registers: r0–r15 per thread. Threads: 4. PC: 11 bits (4 KB of program). Data addresses: 12 bits (4096 words).
 
@@ -23,20 +29,29 @@ Word: 16 bits. Registers: r0–r15 per thread. Threads: 4. PC: 11 bits (4 KB of 
 - **Start-up.** At configuration every thread starts at address 0 with C = 0 and r15 =
   its thread number (0–3). The other registers start undefined, and software must set them
   before use. A thread separates itself from the others by testing r15.
-- **Data accesses** are 16-bit words at the address in rs (the low `data_bits` bits).
-  There are no byte loads.
+- **Data accesses** are 16-bit words at the address rs + k, where k is a 4-bit unsigned
+  offset (0–15, default 0). The low `data_bits` bits of the sum are used. There are no
+  byte loads.
 - **Carry flag C.** `add` and `sub` set it, in both the register and immediate forms, and
   so does `cmp`. After `add`, C = carry out. After `sub` or `cmp`, C = 1 when rd ≥ rs or
-  imm, unsigned (no borrow). Every other instruction leaves C unchanged. `skip cc` and
-  `skip cs` test it.
+  imm, unsigned (no borrow). The shifts (`shl`, `shr`, `rcl`, `rcr`) set C to the bit
+  shifted out. Every other instruction leaves C unchanged. `skip cc`, `skip cs`, `bcc` and
+  `bcs` test it.
+- **Shifts through C.** `rcl` and `rcr` shift C in where `shl` and `shr` shift in 0. So
+  `shl lo` then `rcl hi` shifts a 32-bit value left, and `shr x` then `skip cc` tests the
+  bit that left x.
 - **Immediates** are 8 bits, sign-extended in the ALU form: `li` loads −128..127. The
   assembler also accepts 128..255 and stores the low 8 bits, so `li r1, 200` loads
   0xFFC8. `ldhi` sets the high byte, so any 16-bit constant is `li` then `ldhi`.
 - **Calls.** `jal rd, rs` jumps to the address in rs and saves the return address (PC+1)
   in rd. A return is `jal r0, rN`, which writes the address after the return into r0, so
   r0 is a scratch register by convention.
-- **Skips** discard the next instruction when their condition holds. With a `jmp` after
-  them they make any conditional branch.
+- **Branches.** `jmp`, `bcs` and `bcc` take an absolute 11-bit target. `bcs` jumps when C
+  is set and `bcc` when it is clear, so `cmp` then `bcc` is a compare-and-branch.
+- **Skips** discard the next instruction when their condition holds, at no cost: a skipped
+  instruction takes no cycle. A skip and a `jmp` make a branch on any condition.
+- **Counted loops.** Count up from −n to 0: `add rN, 1` sets C on the step that reaches 0,
+  so `add rN, 1` then `bcc loop` closes a loop in 2 instructions.
 
 ## Register conventions
 
@@ -52,12 +67,12 @@ Bit 15 is on the left. Letters are fields, `-` bits are ignored and written as 0
 |---|---|---|
 | ALU, immediate | `0ooo dddd iiii iiii` | op [14:12], rd [11:8], imm8 [7:0] |
 | ALU, register | `1000 dddd ssss wooo` | rd [11:8], rs [7:4], w (1 = no write) [3], op [2:0] |
-| Load | `1001 dddd ssss ----` | rd [11:8], rs [7:4] |
-| Store | `1010 dddd ssss ----` | rd [11:8], rs [7:4] |
+| Load | `1001 dddd ssss kkkk` | rd [11:8], rs [7:4], offset [3:0] |
+| Store | `1010 dddd ssss kkkk` | rd [11:8], rs [7:4], offset [3:0] |
 | Load high byte | `1011 dddd iiii iiii` | rd [11:8], imm8 [7:0] |
 | Skip | `1100 dddd ---- -ccc` | rd [11:8], cond [2:0] |
 | Jump and link | `1101 dddd ssss ----` | rd [11:8], rs [7:4] |
-| Jump | `111- -ttt tttt tttt` | target [10:0] |
+| Jump / branch | `111b bttt tttt tttt` | branch (0 always, 1 C set, 2 C clear) [12:11], target [10:0] |
 
 ## Instructions
 
@@ -76,16 +91,20 @@ Bit 15 is on the left. Letters are fields, `-` bits are ignored and written as 0
 | `xor` | `rd, imm` | ALU, immediate | op = 4 | ″ |
 | `mov` | `rd, rs` | ALU, register | op = 5, w = 0 | rd ← rs |
 | `li` | `rd, imm` | ALU, immediate | op = 5 | rd ← sext(imm) |
-| `shl` | `rd` | ALU, register | op = 6, rs = 0, w = 0 | rd ← rd << 1 |
-| `shr` | `rd` | ALU, register | op = 7, rs = 0, w = 0 | rd ← rd >> 1 (logical) |
+| `shl` | `rd` | ALU, register | op = 6, rs = 0, w = 0 | rd ← rd << 1; C ← old bit 15 |
+| `shr` | `rd` | ALU, register | op = 7, rs = 0, w = 0 | rd ← rd >> 1 (logical); C ← old bit 0 |
+| `rcl` | `rd` | ALU, register | op = 6, rs = 1, w = 0 | rd ← {rd[14:0], C}; C ← old bit 15 |
+| `rcr` | `rd` | ALU, register | op = 7, rs = 1, w = 0 | rd ← {C, rd[15:1]}; C ← old bit 0 |
 | `nop` | `—` | ALU, immediate | op = 3, rd = 0, imm8 = 0 | no effect (or r0, 0) |
-| `ld` | `rd, [rs]` | Load | — | rd ← D[rs] |
-| `st` | `rd, [rs]` | Store | — | D[rs] ← rd |
+| `ld` | `rd, [rs+k]` | Load | — | rd ← D[rs + k]; k = 0–15, written [rs] or [rs+k] |
+| `st` | `rd, [rs+k]` | Store | — | D[rs + k] ← rd |
 | `ldhi` | `rd, imm` | Load high byte | — | rd ← {imm, rd[7:0]} |
 | `skip` | `cond, rd` | Skip | — | skip the next instruction if cond (rd is needed only by z, nz, neg, nneg, odd) |
 | `skip` | `cond` | Skip | rd = 0 | ″ |
 | `jal` | `rd, rs` | Jump and link | — | rd ← PC + 1; PC ← rs |
-| `jmp` | `target` | Jump | — | PC ← target |
+| `jmp` | `target` | Jump / branch | branch = 0 | PC ← target |
+| `bcs` | `target` | Jump / branch | branch = 1 | if C: PC ← target |
+| `bcc` | `target` | Jump / branch | branch = 2 | if not C: PC ← target |
 
 ## ALU operations (field op)
 
@@ -99,8 +118,8 @@ x is rd. s is rs (register form) or the sign-extended imm8 (immediate form).
 | 3 | `or` | x \| s | unchanged |
 | 4 | `xor` | x ^ s | unchanged |
 | 5 | `pass` | s | unchanged |
-| 6 | `shl` | x << 1 | unchanged |
-| 7 | `shr` | x >> 1 (logical) | unchanged |
+| 6 | `shl` | x << 1, bit 0 = 0 (shl) or C (rcl) | old bit 15 |
+| 7 | `shr` | x >> 1, bit 15 = 0 (shr) or C (rcr) | old bit 0 |
 
 ## Skip conditions (field cond)
 
@@ -140,11 +159,18 @@ A mnemonic with both a register and an immediate form picks the form from its op
 
 ## Open items
 
-Measured proposals for later versions, not part of 0.3:
-- A 12-bit PC. The 11-bit PC limits programs to 4 KB, while F1 leaves up to 6 KB of BRAM
-  for code.
-- Unrolled kernels against code size (D-002's secondary metric).
-- A multiply step or shift-by-N, if mul16 or crc16 pay for its cells.
-- Load/store with an offset, if sort or memcpy pay for the adder.
-- Generated customasm rules and C decode tables (planned in CLAUDE.md). customasm is not in
-  the pinned toolchain, so the assembler is `isa/asm.py`, driven by this file.
+Settled in D-008 (measurements in `docs/phase3/benchmarks.md`):
+- **12-bit PC: no.** The jump's spare bits now hold the branch condition. The board's ROM is
+  4 KB (8 BRAMs), and only one BRAM is spare.
+- **Multiply step: no.** It writes two registers, and the register file has one write
+  port. `rcr` gives mul16 1.52× without it.
+- **Shift-by-N: no.** A barrel shifter is 134 cells (`docs/phase2/primitives.md`), +40%.
+- **Load/store offset: yes**, in the 4 bits that 0.3 ignored. Rolled loops gain little
+  (sort 1.14×); unrolled loops gain most (memcpy 2.4×).
+- **Unrolling** is a programming choice, not an ISA feature. The scored kernels stay rolled;
+  unrolled versions are reported beside them with their code size.
+- **customasm rules: dropped.** customasm is not in the pinned toolchain, and `isa/asm.py`
+  reads this file directly. C decode tables come with the C ISS.
+
+Encodings left for later: jump condition 3, the immediate forms of the shifts (op 6 and 7),
+and rs values 2–15 in the shift forms.

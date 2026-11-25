@@ -40,9 +40,10 @@ uart_echo_TB  := sim/uart_echo_tb.sv
 
 # The CPU (D-006, D-007): F1 core + ROM + RAM + hardware UART, running programs/demo.s
 sloputron_SRC := rtl/core/isa_pkg.sv rtl/core/f1_core.sv rtl/board/sloputron.sv \
-                 rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv
+                 rtl/lib/uart_rx.sv rtl/lib/uart_tx.sv rtl/lib/sb_pll40_core.sv
 sloputron_TB  := sim/sloputron_tb.sv
 $(B)/sloputron/synth.json sim-sloputron: $(B)/programs/demo.hex
+sim-sloputron: $(B)/programs/stress.hex
 
 # Programs: programs/NAME.s -> build/programs/NAME.hex (+ .lst), by the spec-driven assembler
 $(B)/programs/%.hex: programs/%.s isa/isa.toml isa/isa.py isa/asm.py
@@ -50,7 +51,7 @@ $(B)/programs/%.hex: programs/%.s isa/isa.toml isa/isa.py isa/asm.py
 	python3 isa/asm.py $< -o $@ --list $(@:.hex=.lst) > /dev/null
 
 # ---- units: shared RTL with its own testbench, linted and simulated but not built ------
-UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4 skel_f5 r_f1 r_f5
+UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4 skel_f5 r_f1 r_f5 f1_core
 
 stack_bram_SRC := rtl/lib/stack_bram.sv
 stack_bram_TB  := sim/stack_bram_tb.sv
@@ -65,11 +66,13 @@ $(B)/skel/data.hex: skel/asm.py
 
 # Phase 3 benchmarks on F1 and F5 (bench/, D-005): the four D-002 kernels, checked against
 # bench/kernels.py's reference interpreter
-BENCH_SRC := bench/rtl/bench_top.sv bench/rtl/r_alu.sv bench/rtl/r_f1.sv bench/rtl/r_f5.sv
-$(foreach u,r_f1 r_f5,$(eval $(u)_SRC := $(BENCH_SRC)) $(eval $(u)_TB := bench/sim/bench_tb.sv))
-sim-r_f1 sim-r_f5: $(B)/bench/crc16.hex
-$(B)/bench/crc16.hex: bench/kernels.py
-	python3 bench/kernels.py $(@D) > /dev/null
+# The CPU core itself (f1_core) is checked on the same kernels with every ISA 1.0 extension.
+BENCH_SRC := rtl/core/isa_pkg.sv rtl/core/f1_core.sv \
+             bench/rtl/bench_top.sv bench/rtl/r_alu.sv bench/rtl/r_f1.sv bench/rtl/r_f5.sv
+$(foreach u,r_f1 r_f5 f1_core,$(eval $(u)_SRC := $(BENCH_SRC)) $(eval $(u)_TB := bench/sim/bench_tb.sv))
+sim-r_f1 sim-r_f5 sim-f1_core: $(B)/bench/x0/crc16.hex
+$(B)/bench/x0/crc16.hex: bench/kernels.py
+	python3 bench/kernels.py $(B)/bench > /dev/null
 
 # GNU make 3.81 (macOS default) ignores .SHELLFLAGS, so recipes with pipes set pipefail
 # themselves; `timeout` is optional (coreutils `gtimeout` on macOS).

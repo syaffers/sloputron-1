@@ -4,11 +4,18 @@
 //   data RAM     1024 x 16 at data addresses 0x000-0x3FF (4 BRAMs), zero at configuration
 //   I/O          0x800-0xFFF, decoded from address bit 11 and bits 1..0 (isa.toml [memory]):
 //                0xFFC UART_TX (W), 0xFFD UART_STATUS (R), 0xFFE UART_RX (R, clears), 0xFFF LED (W)
-// The clock is the board's 12 MHz oscillator. Loads take effect one cycle later (the RAM's
-// synchronous read), so the I/O read data is registered the same way.
+// The clock is the board's 12 MHz oscillator, or the PLL when PLL_DIVF > 0 (set CLK_HZ to
+// match; scripts/board_sweep.py does this from `icepll`). Loads take effect one cycle later
+// (the RAM's synchronous read), so the I/O read data is registered the same way.
 `default_nettype none
 module sloputron #(
-    parameter int    CLKS_PER_BIT = 104,            // 12 MHz / 115200
+    parameter int    CLK_HZ       = 12_000_000,     // the CPU clock: 12 MHz, or the PLL output
+    /* verilator lint_off UNUSEDPARAM */            // used only by the PLL (not simulated)
+    parameter int    PLL_DIVR     = 0,              // PLL settings from icepll; DIVF = 0: no PLL
+    parameter int    PLL_DIVF     = 0,
+    parameter int    PLL_DIVQ     = 0,
+    parameter int    PLL_FILTER   = 0,
+    /* verilator lint_on UNUSEDPARAM */
     parameter string ROM          = "build/programs/demo.hex"
 ) (
     input  wire        clk,
@@ -17,7 +24,32 @@ module sloputron #(
     output logic [4:0] led = '0
 );
     import isa_pkg::*;
-    localparam int RAM_WORDS = 1024;
+    localparam int RAM_WORDS    = 1024;
+    localparam int CLKS_PER_BIT = (CLK_HZ + 57_600) / 115_200;        // 104 at 12 MHz
+    // The start-up hold (f1_core) lasts at least the 85 us that was tested at 12 MHz.
+    localparam int STARTUP      = 1 << $clog2((CLK_HZ + 11_999_999) / 12_000_000 * 1024);
+
+    // ---- clock: the oscillator, or the PLL (the core waits for the PLL to lock) -----------
+    wire cclk, lock;
+    generate if (PLL_DIVF == 0) begin : g_osc
+        assign cclk = clk;
+        assign lock = 1'b1;
+    end else begin : g_pll
+`ifdef VERILATOR
+        assign cclk = clk;
+        assign lock = 1'b1;
+`else
+        SB_PLL40_CORE #(
+            .FEEDBACK_PATH("SIMPLE"), .DIVR(4'(PLL_DIVR)), .DIVF(7'(PLL_DIVF)),
+            .DIVQ(3'(PLL_DIVQ)), .FILTER_RANGE(3'(PLL_FILTER))
+        ) pll (
+            .REFERENCECLK(clk), .RESETB(1'b1), .BYPASS(1'b0),
+            .PLLOUTCORE(), .PLLOUTGLOBAL(cclk), .LOCK(lock));
+`endif
+    end endgenerate
+    logic [1:0] locked = '0;                        // LOCK is asynchronous: synchronise it
+    always_ff @(posedge cclk) locked <= {locked[0], lock};
+    wire run = PLL_DIVF == 0 ? 1'b1 : locked[1];
 
     wire  [10:0]          iaddr;
     logic [15:0]          insn;
@@ -28,19 +60,19 @@ module sloputron #(
     wire                  dre, dwe;
     logic [15:0]          drd;
 
-    f1_core cpu (.clk, .iaddr, .insn, .daddr, .dre, .drd, .dwe, .dwa, .dwd);
+    f1_core #(.STARTUP(STARTUP)) cpu (.clk(cclk), .run, .iaddr, .insn, .daddr, .dre, .drd, .dwe, .dwa, .dwd);
 
     // ---- memories ---------------------------------------------------------------------
     (* ram_style = "block" *)              logic [15:0] rom [2048];
     (* ram_style = "block", no_rw_check *) logic [15:0] ram [RAM_WORDS];
     initial $readmemh(ROM, rom);
     initial for (int i = 0; i < RAM_WORDS; i++) ram[i] = '0;
-    always_ff @(posedge clk) insn <= rom[iaddr];
+    always_ff @(posedge cclk) insn <= rom[iaddr];
 
     wire io_rd = daddr[11];
     wire io_wr = dwe & dwa[11];
     logic [15:0] ram_q;
-    always_ff @(posedge clk) begin
+    always_ff @(posedge cclk) begin
         if (dwe & !dwa[11]) ram[dwa[9:0]] <= dwd;
         ram_q <= ram[daddr[9:0]];
     end
@@ -48,12 +80,12 @@ module sloputron #(
     // ---- UART -------------------------------------------------------------------------
     logic [7:0] rx_data, rx_byte = '0;
     logic       rx_valid, rx_full = 1'b0, tx_busy;
-    uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_rx (.clk, .rx(uart_rx), .data(rx_data), .valid(rx_valid));
+    uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_rx (.clk(cclk), .rx(uart_rx), .data(rx_data), .valid(rx_valid));
     uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_tx (
-        .clk, .start(io_wr && dwa[1:0] == IO_UART_TX[1:0] && !tx_busy), .data(dwd[7:0]),
+        .clk(cclk), .start(io_wr && dwa[1:0] == IO_UART_TX[1:0] && !tx_busy), .data(dwd[7:0]),
         .tx(uart_tx), .busy(tx_busy));
 
-    always_ff @(posedge clk) begin
+    always_ff @(posedge cclk) begin
         if (rx_valid) begin                         // a new byte wins over a clearing read
             rx_byte <= rx_data;
             rx_full <= 1'b1;
@@ -66,7 +98,7 @@ module sloputron #(
     // ---- read data: RAM or I/O, both one cycle after the address ------------------------
     logic [15:0] io_q;
     logic        io_sel;
-    always_ff @(posedge clk) begin
+    always_ff @(posedge cclk) begin
         io_sel <= io_rd;
         case (daddr[1:0])
             IO_UART_STATUS[1:0]: io_q <= {14'd0, rx_full, tx_busy};

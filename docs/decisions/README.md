@@ -12,3 +12,4 @@ choice, decision, and consequences. New records get the next number.
 | D-005 | 2026-11-24 | [Shortlist narrowed to F1 and F5; memory rules for N-copy benchmarks](D-005-f1-f5-benchmarks.md) | accepted |
 | D-006 | 2026-11-24 | [Commit to F1, the barrel register machine, with 4 threads](D-006-commit-f1.md) | accepted |
 | D-007 | 2026-11-24 | [A dedicated hardware UART, memory-mapped beside the barrel](D-007-hardware-uart.md) | accepted |
+| D-008 | 2026-11-25 | [Instruction set 1.0 for F1: branch on carry, carry shifts, load/store offset](D-008-isa-1.0.md) | accepted (owner may veto) |

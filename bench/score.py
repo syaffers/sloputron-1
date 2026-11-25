@@ -14,7 +14,10 @@ import csv, math, os, re, subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KERNELS = ("crc16", "sort", "mul16", "memcpy")
 SIMS = {"F1, 4 threads": "f1_n4", "F1, 8 threads": "f1_n8", "F5, stalls": "f5",
-        "F5, forwarding": "f5_fwd"}
+        "F5, forwarding": "f5_fwd", "F1 x1, 4 threads": "f1x1", "F1 x2, 4 threads": "f1x2",
+        "F1 x3, 4 threads": "f1x3", "F1 x7, 4 threads": "f1x7",
+        "F1 x11, 4 threads": "f1x11", "F1 x15, 4 threads": "f1x15"}
+HW = {"f1x11": "f1x3", "f1x15": "f1x7"}     # unrolled kernels (X bit 3) run on the same hardware
 
 
 def cycles():
@@ -26,7 +29,7 @@ def cycles():
                          capture_output=True, text=True).stdout
     c = {}
     for line in out.splitlines():
-        m = re.match(r"(F\d, [a-z0-9 ]+?)\s+(\w+)\s+(\d+)/(\d+) done, 0 words wrong, cycles (\d+)", line)
+        m = re.match(r"(F\d(?: x\d+)?, [a-z0-9 ]+?)\s+(\w+)\s+(\d+)/(\d+) done, 0 words wrong, cycles (\d+)", line)
         if m and m.group(2) in KERNELS and m.group(3) == m.group(4):
             c[(SIMS[m.group(1)], m.group(2))] = (int(m.group(5)), int(m.group(4)))
     assert len(c) == len(SIMS) * len(KERNELS), sorted(c)
@@ -38,7 +41,7 @@ def main():
     cyc = cycles()
     out = []
     for name in SIMS.values():
-        r = rows[name]
+        r = rows[HW.get(name, name)]
         lc, f = int(r["lc"]), float(r["fmax_median"]) * 1e6
         row = dict(name=name, lc=lc, fmax_median=r["fmax_median"])
         merits = []
