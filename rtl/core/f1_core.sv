@@ -24,6 +24,11 @@
 // Only instructions fetched after that are executed, so every thread starts cleanly at
 // PC 0. `run` is the PLL's lock signal when the clock comes from the PLL, else 1.
 //
+// Retirement port (rvfi_*, after RISC-V's RVFI): in S3 every instruction that finishes
+// reports its thread, PC, word, next PC and carry, its register write and its data access.
+// sim/lockstep_tb.sv checks it against the C ISS (iss/). Nothing on the board reads it,
+// so synthesis removes it.
+//
 // ISA 1.0 (D-008) is 0.3 plus branch on C, carry shifts and a load/store offset. This is
 // bench/rtl/r_f1.sv with X = 7 (all three), with the decode taken from isa_pkg, a load
 // strobe (dre) for I/O reads that have side effects, and the start-up hold.
@@ -45,7 +50,22 @@ module f1_core
     input  wire  [15:0]   drd,                  // D[daddr], one cycle later
     output wire           dwe,
     output wire  [DA-1:0] dwa,
-    output wire  [15:0]   dwd
+    output wire  [15:0]   dwd,
+    // retirement port: one instruction per clock once the start-up hold is over
+    output wire           rvfi_valid,
+    output wire  [TB-1:0] rvfi_thread,
+    output wire  [10:0]   rvfi_pc,
+    output wire  [15:0]   rvfi_insn,
+    output wire  [10:0]   rvfi_pc_next,
+    output wire           rvfi_c,               // carry flag after the instruction
+    output wire           rvfi_rd_we,
+    output wire  [3:0]    rvfi_rd,
+    output wire  [15:0]   rvfi_rd_wdata,
+    output wire           rvfi_mem_re,
+    output wire           rvfi_mem_we,
+    output wire  [DA-1:0] rvfi_mem_addr,
+    output wire  [15:0]   rvfi_mem_rdata,
+    output wire  [15:0]   rvfi_mem_wdata
 );
     (* ram_style = "block", no_rw_check *) logic [11:0] pcm [N];      // {C, PC}
     (* ram_style = "block", no_rw_check *) logic [15:0] rfa [N * 16];
@@ -171,6 +191,38 @@ module f1_core
         rd3 <= rd2;
     end
     wire [15:0] wd = ld3 ? drd : y3;
+
+    // ---- retirement port (verification only) --------------------------------------------
+    logic [10:0]   pcx1, pcx2, pcx3, pcn3;
+    logic [15:0]   insn2, insn3, xd3;
+    logic          c3, st3;
+    logic [DA-1:0] ea3;
+    always_ff @(posedge clk) begin
+        pcx1  <= q[10:0];
+        pcx2  <= pcx1;
+        insn2 <= insn;
+        pcx3  <= pcx2;
+        insn3 <= insn2;
+        pcn3  <= pcn;
+        c3    <= cfn;
+        st3   <= st2;
+        ea3   <= ea;
+        xd3   <= xd;
+    end
+    assign rvfi_valid     = g3;
+    assign rvfi_thread    = th3;
+    assign rvfi_pc        = pcx3;
+    assign rvfi_insn      = insn3;
+    assign rvfi_pc_next   = pcn3;
+    assign rvfi_c         = c3;
+    assign rvfi_rd_we     = we3;
+    assign rvfi_rd        = rd3;
+    assign rvfi_rd_wdata  = wd;
+    assign rvfi_mem_re    = ld3;
+    assign rvfi_mem_we    = st3;
+    assign rvfi_mem_addr  = ea3;
+    assign rvfi_mem_rdata = drd;
+    assign rvfi_mem_wdata = xd3;
     always_ff @(posedge clk) if (we3 & g3) begin
         rfa[{th3, rd3}] <= wd;
         rfb[{th3, rd3}] <= wd;

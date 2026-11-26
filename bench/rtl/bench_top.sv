@@ -46,7 +46,10 @@ module bench_top #(
     generate if (CORE == 0) begin : g_core
         /* verilator lint_off PINCONNECTEMPTY */
         f1_core #(.N(N), .DA(DA), .STARTUP(16)) cpu (.clk, .run(1'b1), .iaddr, .insn, .daddr,
-                                                    .dre(), .drd, .dwe, .dwa, .dwd);
+                                                    .dre(), .drd, .dwe, .dwa, .dwd,
+        .rvfi_valid(), .rvfi_thread(), .rvfi_pc(), .rvfi_insn(), .rvfi_pc_next(), .rvfi_c(),
+        .rvfi_rd_we(), .rvfi_rd(), .rvfi_rd_wdata(), .rvfi_mem_re(), .rvfi_mem_we(),
+        .rvfi_mem_addr(), .rvfi_mem_rdata(), .rvfi_mem_wdata());
         /* verilator lint_on PINCONNECTEMPTY */
     end else if (CORE == 1) begin : g_f1
         r_f1 #(.N(N), .DA(DA), .X(X)) cpu (.clk, .iaddr, .insn, .daddr, .drd, .dwe, .dwa, .dwd);

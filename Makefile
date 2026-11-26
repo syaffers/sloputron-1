@@ -50,6 +50,22 @@ $(B)/programs/%.hex: programs/%.s isa/isa.toml isa/isa.py isa/asm.py
 	@mkdir -p $(@D)
 	python3 isa/asm.py $< -o $@ --list $(@:.hex=.lst) > /dev/null
 
+# ---- C instruction-set simulator (iss/) and lockstep against the RTL ----------------------
+CC     ?= cc
+CFLAGS_ISS := -std=c99 -O2 -Wall -Wextra -pedantic -Werror
+ISS_LIB := iss/iss.c iss/iss.h iss/isa_gen.h
+$(B)/iss/slp-iss: $(ISS_LIB) iss/main.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS_ISS) -Iiss -o $@ iss/iss.c iss/main.c
+
+# sim/lockstep_tb.sv: the board design, its retirement port checked against the ISS (DPI-C)
+lockstep_TB     := sim/lockstep_tb.sv
+lockstep_SRC    := $(sloputron_SRC) $(ROOT)/iss/iss.c $(ROOT)/iss/dpi.c
+lockstep_VFLAGS := -CFLAGS -I$(ROOT)/iss
+sim-lockstep: $(B)/programs/demo.hex $(B)/programs/stress.hex $(B)/lockstep/rand0.hex iss/iss.h iss/isa_gen.h
+$(B)/lockstep/rand0.hex: iss/random_rom.py
+	python3 iss/random_rom.py $(@D)
+
 # ---- units: shared RTL with its own testbench, linted and simulated but not built ------
 UNITS := stack_bram skel_f1 skel_f2 skel_f3 skel_f4 skel_f5 r_f1 r_f5 f1_core
 
@@ -84,7 +100,7 @@ PNR_FLAGS := --hx1k --package tq144 --pcf $(PCF) --freq $(FREQ) --timing-allow-f
 VWARN     := -Wall -Wno-DECLFILENAME -Wno-PROCASSINIT
 VSIMFLAGS := $(VWARN) -Wno-UNUSEDSIGNAL -Wno-ZERODLY --binary --timing -j 0
 
-.PHONY: help all bits bit prog sweep report check sim lint uart-test isa isa-test toolchain versions clean
+.PHONY: help all bits bit prog sweep report check sim lint uart-test isa isa-test iss iss-test toolchain versions clean
 help:
 	@echo "make bits                  bitstreams for all designs -> build/<design>.bin (seed $(SEED))"
 	@echo "make bit  D=uart_echo      one bitstream"
@@ -93,6 +109,8 @@ help:
 	@echo "make sim                   self-checking Verilator testbenches (runs isa-test first)"
 	@echo "make isa                   regenerate docs/isa/isa.md and rtl/core/isa_pkg.sv from isa/isa.toml"
 	@echo "make isa-test              generated ISA files up to date + assembler round-trip test"
+	@echo "make iss / iss-test        build the C ISS (build/iss/slp-iss) / check it on the programs and kernels"
+	@echo "make sim-lockstep          the CPU checked instruction by instruction against the ISS"
 	@echo "make lint                  Verilator lint of every design"
 	@echo "make sweep                 $(SEEDS)-seed nextpnr sweep of every design"
 	@echo "make report NOTE='...'     sweep + append rows to results.csv (do this before committing hardware changes)"
@@ -140,7 +158,7 @@ check: $(DESIGNS:%=$(B)/%/sweep.json)
 
 # ---- simulation and lint --------------------------------------------------------
 SIM_DESIGNS := $(foreach d,$(DESIGNS),$(if $($(d)_TB),$(d)))
-sim: isa-test $(SIM_DESIGNS:%=sim-%) $(UNITS:%=sim-%)
+sim: isa-test iss-test $(SIM_DESIGNS:%=sim-%) $(UNITS:%=sim-%) sim-lockstep
 
 # ---- instruction set (isa/isa.toml is the source) -------------------------------------
 isa:
@@ -149,9 +167,13 @@ isa:
 isa-test:
 	python3 isa/gen.py --check
 	python3 isa/test_isa.py
+
+iss: $(B)/iss/slp-iss
+iss-test: $(B)/iss/slp-iss $(B)/programs/demo.hex $(B)/programs/stress.hex $(B)/bench/x0/crc16.hex
+	python3 iss/test_iss.py $(B)
 sim-%:
 	@mkdir -p $(B)/sim/$*
-	verilator $(VSIMFLAGS) --top-module $*_tb -Mdir $(B)/sim/$* $($*_TB) $($*_SRC) > $(B)/sim-$*.log 2>&1 \
+	verilator $(VSIMFLAGS) $($*_VFLAGS) --top-module $*_tb -Mdir $(B)/sim/$* $($*_TB) $($*_SRC) > $(B)/sim-$*.log 2>&1 \
 	  || { cat $(B)/sim-$*.log; exit 1; }
 	set -o pipefail; $(call RUN_TIMEOUT,300) $(B)/sim/$*/V$*_tb | grep -v '^- '
 

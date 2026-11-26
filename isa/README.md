@@ -9,8 +9,8 @@ generated from it or reads it:
 | `isa.toml` | the spec (edit this) |
 | `isa.py` | library that loads the spec: encode, decode, a two-pass assembler, a disassembler. The assembly syntax is at the top of the file. |
 | `asm.py` | command line: `isa/asm.py prog.s -o prog.hex [--list prog.lst]`, `isa/asm.py --disasm prog.hex` |
-| `gen.py` | writes `docs/isa/isa.md` (the written spec) and `rtl/core/isa_pkg.sv` (decode constants for the RTL) |
-| `iss.py` | instruction-set simulator of the board: the 4-thread barrel, RAM, UART and LEDs. `isa/iss.py prog.hex --rx TEXT` prints the UART output; `scripts/board_sweep.py` uses it to count clocks |
+| `gen.py` | writes `docs/isa/isa.md` (the written spec), `rtl/core/isa_pkg.sv` (decode constants for the RTL) and `iss/isa_gen.h` (the same for the C ISS) |
+| `iss.py` | Python instruction-set simulator of the board (the C one, about 100× faster, is in `iss/`): the 4-thread barrel, RAM, UART and LEDs. `isa/iss.py prog.hex --rx TEXT` prints the UART output; `scripts/board_sweep.py` uses it to count clocks |
 | `test_isa.py` | checks that every canonical 16-bit encoding disassembles and re-assembles to itself, that the Phase 3 benchmark binaries (0.3 and 1.0) agree with the spec, some syntax cases, and that the ISS runs the demo |
 
 After editing `isa.toml`, run `make isa` and commit the generated files with it. `make sim`
