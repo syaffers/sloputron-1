@@ -74,7 +74,8 @@ docs/process.md           results.csv protocol and CI rules
 docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md (decision D-001)
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
-docs/phase3/              Phase 3: benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
+docs/phase3/              Phase 3: summary.md (outcome, lessons), benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
+docs/phase4/              Phase 4: plan.md (optimise cells and clock)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
@@ -134,42 +135,35 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     stalls; forwarding (368 LC, 78 MHz) does not pay. On the crc test, two-operand
     instructions give 1.24× F3's work per cell, and F1's threads add a further 1.42×
     (N copies; the UART is not scored, D-004).
-- **Phase 3 (in progress):** D-005 narrowed the shortlist to F1 (barrel) and F5 (single
-  thread), which share a two-operand register ISA (v2).
-  - All four D-002 kernels run on both, checked against a reference interpreter
-    (`docs/phase3/benchmarks.md`, `bench/`).
-  - ISA v3 adds a carry flag and `cmp`. v2 compared in one cycle through the ALU carry,
-    which cost both cores 15–23% of their Fmax.
-  - Geometric mean, iterations/s per 1000 core cells (D-005: core cells only; 16 seeds):
-    - F1 4 threads: 37,364 (336 LC, 90.0 MHz);
-    - F1 8 threads: 35,974;
-    - F5 stalls: 28,526 (338 LC, 84.1 MHz).
-
-    F1 with 4 threads leads by 1.31×. On whole-system cells the two are level (1.02×).
-  - **D-006: the CPU is F1 with 4 threads** (barrel, two-operand registers, state in BRAM).
-  - **ISA spec 0.3** (= v3) is written: `isa/isa.toml` generates `docs/isa/isa.md` and
-    `rtl/core/isa_pkg.sv` and drives the assembler `isa/asm.py`. Every canonical encoding
-    round-trips. customasm is not in the toolchain, so its rules are deferred.
-  - **D-007: hardware UART**, memory-mapped at 0xFFC–0xFFF beside the LEDs.
-  - **The CPU runs on the board** (design `sloputron`, `docs/phase3/board.md`):
-    - the four-thread demo prints `crc16=29B1` and echoes 4,096 bytes with 0 errors;
-    - iCE40 BRAMs read wrong just after configuration, so the core holds for 1,024
-      clocks (19 LC).
-  - **PLL sweep** (`scripts/board_sweep.py`, 3 seeds, `docs/phase3/board.md`):
-    - every build runs the stress program correctly up to 114 MHz (ISA 0.3) and 126 MHz
-      (ISA 1.0);
-    - nextpnr's ~90 MHz is therefore conservative by at least 25% on this board at room
-      temperature.
-  - **Whole CPU with ISA 1.0:** 481 LC, 15 BRAMs, 89.5 / 86.7 MHz (16 seeds).
-  - **D-008: ISA 1.0** = 0.3 + branch on C (`bcc`/`bcs`) + carry shifts (`rcl`/`rcr`;
-    shifts set C) + a 4-bit load/store offset. That is 1.23× the work per clock per cell:
-    354 LC, geometric mean 48,768 (0.3: 38,295 in the same run). No 12-bit PC, multiply
-    step or shift-by-N. The board runs 1.0.
-  - **C99 ISS and lockstep** (`docs/phase3/verification.md`):
-    - `iss/` simulates the board clock-exactly, at about 18M instructions/s;
-    - `make sim-lockstep` checks every instruction the RTL finishes against it, on the
-      demo, the stress test and 8 random ROMs (2M instructions, 0 mismatches);
-    - all 9 planted core bugs were caught, 3 of them only by the random ROMs.
+- **Phase 3 (done, 2026-11-26):** benchmarks, the choice of CPU, its ISA, the board and
+  verification. Summary and lessons: `docs/phase3/summary.md`.
+  - D-005 narrowed the shortlist to F1 and F5; **D-006 chose F1 with 4 threads** (1.31×
+    F5). D-007: hardware UART at 0xFFC–0xFFF.
+  - **ISA 1.0 (D-008)** = 0.3 + `bcc`/`bcs` + carry shifts (`rcl`/`rcr`) + a 4-bit
+    load/store offset: 1.23× the work per clock per cell. `isa/isa.toml` generates the
+    spec, `rtl/core/isa_pkg.sv` and `iss/isa_gen.h`, and drives `isa/asm.py`.
+  - **Scored core** (benchmark copy `bench/rtl/r_f1.sv`, X = 7): 354 LC, 95.4 / 91.8 MHz,
+    **score 48,768** (iterations/s per 1000 core cells, geometric mean, 16 seeds).
+  - **On the board** (`sloputron`, `docs/phase3/board.md`):
+    - 482 LC, 15 BRAMs, 91.2 / 87.5 MHz (16 seeds);
+    - the banner and a 4,096-byte echo pass;
+    - with the PLL, every build passes the stress test up to 126 MHz, so nextpnr is
+      conservative by at least 25%;
+    - the core holds for 1,024 clocks at start-up, because iCE40 BRAMs read wrong just
+      after configuration.
+  - **Verification** (`docs/phase3/verification.md`):
+    - the C99 ISS (`iss/`) counts clocks exactly;
+    - `make sim-lockstep` checks every RTL instruction against it: demo, stress and 8
+      random ROMs, 0 mismatches;
+    - all 9 planted bugs were caught.
+- **Phase 4 (planned): optimise cells and clock** (`docs/phase4/plan.md`). The ISA stays
+  at 1.0.
+  0. Score the real core (`f1_core`) instead of the benchmark copy; owner decision, D-009.
+  1. Find where the cells go (hierarchy + ablation) → `docs/phase4/breakdown.md`.
+  2. Shrink the largest blocks (shifts through the adder, logic operations in one LUT per
+     bit, next-PC adders, start-up hold, recheck the offset).
+  3. Shorten the critical path (register read → adder → C → `pcm` write): keep C in 4
+     flip-flops written a stage later; then the skip path; 8 threads only if needed.
 
 Shortlist (D-001), a 2×2 of thread organisation × operand model. D-005 narrowed it to F1
 and F5 (F5 runs F1's ISA on a single thread, D-003). **D-006 chose F1 with 4 threads.**
