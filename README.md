@@ -1,41 +1,54 @@
 # sloputron-1
 
 An original 16-bit CPU for the Lattice iCE40HX1K (iCEstick). The goal is the most benchmark
-throughput per logic cell. Every design choice is justified by numbers measured on this chip
-with a pinned open-source toolchain.
+work per logic cell. Every design choice rests on numbers measured on this chip with a
+pinned open-source toolchain (OSS CAD Suite 2026-11-01).
 
-- Project brief, rules and status: [`CLAUDE.md`](CLAUDE.md)
-- Phase 0 results:
-  - [baselines](docs/phase0/baselines.md)
-  - [bibliography](docs/phase0/bibliography.md)
-  - [tricks](docs/phase0/tricks.md)
-  - [shortlist / D-001](docs/phase0/shortlist.md)
+## What it is
+- **A 4-thread barrel CPU** (D-006). Four programs take turns, one instruction each per
+  clock. Each instruction has four clocks to finish, so there are no pipeline hazards and
+  no forwarding logic.
+- **State lives in block RAM.** Registers (16 × 16 bits per thread), the PCs and the carry
+  flags sit in BRAMs, so the core itself stays small.
+- **ISA 1.0** (D-008): 16-bit instructions, two-operand ALU, skips and conditional
+  branches on carry, carry shifts, loads and stores with a 4-bit offset. One TOML file,
+  [`isa/isa.toml`](isa/isa.toml), generates the [spec](docs/isa/isa.md), the RTL decode
+  and the simulator's decode, and drives the assembler.
 
-## Baselines on the HX1K
-OSS CAD Suite 2026-11-01, 16 nextpnr seeds, uniform harness with 4 KB RAM and an LED port.
-
-| Core | Logic cells | Fmax median / worst (MHz) |
+## Where it stands
+| | Cells | Clock (nextpnr, 16 seeds, median / worst) |
 |---|---:|---|
-| Leros | 343 | 84.1 / 80.7 |
-| SERV | 456 | 114.7 / 107.6 |
-| QERV | 584 | 94.8 / 88.4 |
-| FazyRV-4 | 729 | 49.3 / 45.3 |
-| FemtoRV32-Quark | 960 | 57.3 / 53.1 |
-| J1a | 1013 | 79.4 / 75.0 |
-| Minimax | 1253 | 60.0 / 55.9 |
-| PicoRV32 (small) | does not fit | — |
+| The core, as scored (score **48,768**: iterations/s per 1000 cells, D-002 kernels) | 354 | 95.4 / 91.8 MHz |
+| The whole CPU on the board: core, 4 KB ROM, 2 KB RAM, UART, LEDs | 482 of 1,280 | 91.2 / 87.5 MHz |
+
+- **On the board** it prints a banner and echoes bytes over the UART. With the PLL it runs
+  a self-checking stress test correctly up to 126 MHz.
+- **Verification:** a C instruction-set simulator checks every instruction the RTL
+  finishes, in lockstep, on test programs and random ones.
+- **For scale,** the smallest existing cores measured the same way are SERV (336 cells,
+  but about 36 clocks per instruction) and Leros (343 cells, 84 MHz)
+  ([baselines](docs/phase0/baselines.md)).
+
+**Now:** Phase 4, making the core smaller and its clock faster with the ISA unchanged
+([plan](docs/phase4/plan.md)).
 
 ## Quick start (Debian or macOS)
 ```
-scripts/setup_debian.sh        # or scripts/setup_macos.sh; installs the pinned OSS CAD Suite
-make bits && make prog D=uart_echo && make uart-test
+scripts/setup_debian.sh        # or scripts/setup_macos.sh; installs the pinned toolchain
+make sim lint                  # all simulations, the ISS and the lockstep check
+make prog D=sloputron          # build and flash the CPU (board on this machine)
+make uart-test                 # echo test through the board's UART
 make help                      # everything else
 ```
-Measurement and CI rules: [docs/process.md](docs/process.md). Board bring-up:
-[docs/phase1/bringup.md](docs/phase1/bringup.md).
 
-## Reproduce the baselines
-```
-scripts/fetch_toolchain.sh && scripts/fetch_baselines.sh
-cd baselines && SEEDS=16 ./build.sh
-```
+## Where to read more
+| | |
+|---|---|
+| Project brief, rules, status | [`CLAUDE.md`](CLAUDE.md) |
+| Decisions, one record each | [`docs/decisions/`](docs/decisions/README.md) |
+| Phase 0: survey, baselines, shortlist | [`docs/phase0/`](docs/phase0/) |
+| Phase 1: board bring-up | [`docs/phase1/bringup.md`](docs/phase1/bringup.md) |
+| Phase 2: primitive costs, datapath skeletons | [`docs/phase2/`](docs/phase2/) |
+| Phase 3: benchmarks, the chosen CPU, the board, verification | [`docs/phase3/summary.md`](docs/phase3/summary.md) |
+| Phase 4: optimise cells and clock | [`docs/phase4/plan.md`](docs/phase4/plan.md) |
+| Measurement and CI rules | [`docs/process.md`](docs/process.md) |
