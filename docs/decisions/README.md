@@ -14,3 +14,4 @@ choice, decision, and consequences. New records get the next number.
 | D-007 | 2026-11-24 | [A dedicated hardware UART, memory-mapped beside the barrel](D-007-hardware-uart.md) | accepted |
 | D-008 | 2026-11-25 | [Instruction set 1.0 for F1: branch on carry, carry shifts, load/store offset](D-008-isa-1.0.md) | accepted (owner may veto) |
 | D-009 | 2026-11-27 | [Score the CPU core itself, not its benchmark copy](D-009-score-the-real-core.md) | accepted |
+| D-010 | 2026-11-27 | [Take up research threads T1 (timing isolation, proven) and T5 (nextpnr against the chip)](D-010-research-t1-t5.md) | accepted |
