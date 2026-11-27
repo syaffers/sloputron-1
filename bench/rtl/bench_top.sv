@@ -8,14 +8,17 @@
 // With ROMA = 11, DEPTH = 256 and DA = 8 this is the standard skeleton harness, where cells
 // and Fmax are measured. The benchmark simulations use DA = 12 and DEPTH = 4096.
 // CORE: 1 = F1 barrel (N threads), 5 = F5 single thread (FWD = forwarding),
-//       0 = the CPU core itself (rtl/core/f1_core.sv, ISA 1.0 = r_f1 with X = 7), used only
-//       to check it against the kernels; its start-up hold is cut to 16 clocks.
+//       0 = the CPU core itself (rtl/core/f1_core.sv, ISA 1.0 = r_f1 with X = 7). It is the
+//       scored core from Phase 4 on (D-009). STARTUP is its start-up hold: 1024 as on the
+//       board when it is measured (bench/run.py), 16 in the kernel simulations, which count
+//       cycles from its first instruction.
 `default_nettype none
 module bench_top #(
     parameter int    CORE  = 1,
     parameter int    N     = 4,
     parameter bit    FWD   = 0,
     parameter int    X     = 0,                     // F1 ISA study extensions (r_f1.sv, D-008)
+    parameter int    STARTUP = 16,                  // CORE 0: start-up hold in clocks
     parameter int    ROMA  = 11,
     parameter int    DEPTH = 256,
     parameter int    DA    = 8,
@@ -45,7 +48,7 @@ module bench_top #(
 
     generate if (CORE == 0) begin : g_core
         /* verilator lint_off PINCONNECTEMPTY */
-        f1_core #(.N(N), .DA(DA), .STARTUP(16)) cpu (.clk, .run(1'b1), .iaddr, .insn, .daddr,
+        f1_core #(.N(N), .DA(DA), .STARTUP(STARTUP)) cpu (.clk, .run(1'b1), .iaddr, .insn, .daddr,
                                                     .dre(), .drd, .dwe, .dwa, .dwd,
         .rvfi_valid(), .rvfi_thread(), .rvfi_pc(), .rvfi_insn(), .rvfi_pc_next(), .rvfi_c(),
         .rvfi_rd_we(), .rvfi_rd(), .rvfi_rd_wdata(), .rvfi_mem_re(), .rvfi_mem_we(),

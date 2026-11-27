@@ -1,0 +1,15 @@
+name,block,lc,luts,carries,ffs,fmax_median,fmax_worst,seeds
+base,f1_core as it is,374,304,48,123,95.89,95.89,1
+hold,"start-up hold (counter, go, g0..g3)",355,290,40,108,95.31,95.31,1
+logic,"ALU logic ops (and, or, xor, pass)",308,236,48,123,95.63,95.63,1
+shifts,"ALU shifts (shl, shr, rcl, rcr) and their carry",347,276,48,122,96.8,96.8,1
+alu_mux,ALU output multiplexer (y = sum always),272,201,48,122,92.35,92.35,1
+sub,ALU subtract (operand inversion),368,298,48,123,99.49,99.49,1
+opmux,operand multiplexer (s = rs only),325,255,48,120,101.83,101.83,1
+cond,skip conditions (skip always),363,292,48,123,96.21,96.21,1
+pc2,PC+2 adder (a taken skip goes to PC+1),334,276,40,100,95.57,95.57,1
+nextpc,next-PC multiplexer and PC+2 (next PC = PC+1),311,253,40,98,95.63,95.63,1
+carry,carry-flag rule (C never changes),378,308,47,121,97.15,97.15,1
+branch,branch on C (jmp only),374,302,48,123,101.03,101.03,1
+offset,load/store offset adder (address = rs),367,297,41,123,89.29,89.29,1
+wbmux,write-back multiplexer (ALU result only),354,284,44,121,95.06,95.06,1

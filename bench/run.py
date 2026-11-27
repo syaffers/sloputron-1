@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Phase 3 benchmark cores (D-005): synthesize and place & route F1 and F5 (ISA v2) over N seeds.
+"""Benchmark cores: synthesize and place & route over N seeds. Phase 3 (D-005): the benchmark
+copies of F1 and F5 (bench/rtl). Phase 4 (D-009): the CPU core itself (rtl/core/f1_core.sv).
 
 usage: bench/run.py [--seeds 16] [--jobs 3] [--csv bench/bench.csv] [variant-prefix ...]
 Rows for the variants run replace their old rows in the CSV; other rows are kept.
@@ -42,7 +43,11 @@ VARIANTS = [
     ("f1x3",        "F1 4 threads + both", 1, 4, 0, "score", 3),
     ("f1x7",        "F1 4 threads + both + ld/st offset", 1, 4, 0, "score", 7),
     ("fit_f1x7",    "F1 4 threads + both + ld/st offset", 1, 4, 0, "fit", 7),
+    # Phase 4 (D-009): the CPU core itself, rtl/core/f1_core.sv, with the board's 1024-clock hold
+    ("core",        "f1_core (ISA 1.0)", 0, 4, 0, "score", 7),
+    ("fit_core",    "f1_core (ISA 1.0)", 0, 4, 0, "fit", 7),
 ]
+STARTUP = 1024      # f1_core's start-up hold, as on the board at 12 MHz
 HARNESS = dict(score=dict(ROMA=11, DEPTH=256, DA=8), fit=dict(ROMA=9, DA=12))
 
 
@@ -60,6 +65,8 @@ def build(name, core, n, fwd, harness, x, seeds, jobs):
     h.setdefault("DEPTH", 256 * (n + 1))
     random_hex(os.path.join(d, "skel_rom.hex"), 2 ** h["ROMA"], 1)
     random_hex(os.path.join(d, "skel_ram.hex"), h["DEPTH"], 2)
+    if core == 0:
+        h["STARTUP"] = STARTUP
     g = " ".join(f"-G {k}={v}" for k, v in dict(CORE=core, N=n, FWD=fwd, X=x, **h).items())
     net = os.path.join(d, "synth.json")
     subprocess.run(["yosys", "-q", "-m", "slang", "-l", os.path.join(d, "yosys.log"), "-p",
