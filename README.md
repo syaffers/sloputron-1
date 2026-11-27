@@ -18,11 +18,14 @@ pinned open-source toolchain (OSS CAD Suite 2026-11-01).
 ## Where it stands
 | | Cells | Clock (nextpnr, 16 seeds, median / worst) |
 |---|---:|---|
-| The core, as scored (score **48,768**: iterations/s per 1000 cells, D-002 kernels) | 354 | 95.4 / 91.8 MHz |
-| The whole CPU on the board: core, 4 KB ROM, 2 KB RAM, UART, LEDs | 482 of 1,280 | 91.2 / 87.5 MHz |
+| The core, as scored (score **61,215**: iterations/s per 1000 cells, D-002 kernels) | 301 | 101.8 / 97.4 MHz |
+| The whole CPU on the board: core, 4 KB ROM, 2 KB RAM, UART, LEDs | 401 of 1,280 | 97.7 / 94.6 MHz |
+
+Phase 4 (in progress) took the core from 374 cells and a score of 46,175
+(`docs/phase4/alu.md`).
 
 - **On the board** it prints a banner and echoes bytes over the UART. With the PLL it runs
-  a self-checking stress test correctly up to 126 MHz.
+  a self-checking stress test correctly up to 132 MHz.
 - **Verification:** a C instruction-set simulator checks every instruction the RTL
   finishes, in lockstep, on test programs and random ones.
 - **For scale,** the smallest existing cores measured the same way are SERV (336 cells,
