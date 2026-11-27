@@ -76,6 +76,7 @@ docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
 docs/phase3/              Phase 3: summary.md (outcome, lessons), benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
 docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation), alu.md (steps 2a-2b, board sweep), board_sweep.csv
+docs/research/threads.md  open research threads (T1-T7), breadth-first; owner picks
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
