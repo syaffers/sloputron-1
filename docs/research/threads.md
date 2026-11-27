@@ -91,6 +91,11 @@ frees BRAM for data, more threads, or a second core.
 with many threads is the MTA/GPU idea. Doing it with 4–8 threads on 1,280 cells is the
 open part.
 
+**Measured first (2026-11-27).** The board's programs are small: `demo` is 129 words and
+`stress` 209, out of the ROM's 2,048. So 7 of the 8 ROM blocks hold zeros. Sizing the ROM to
+the program would free about 6 blocks with no research at all. T3 matters only once programs
+outgrow on-chip memory.
+
 **First experiment.** No hardware first. Model it in the ISS:
 - flash latency L clocks;
 - a small per-thread fetch buffer in one BRAM;
