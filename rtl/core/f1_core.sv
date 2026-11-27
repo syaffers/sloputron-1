@@ -118,7 +118,6 @@ module f1_core
     wire is_jal  = (insn & FMT_JAL_MASK)     == FMT_JAL_MATCH;
     wire is_jmp  = (insn & FMT_JMP_MASK)     == FMT_JMP_MATCH;
     wire [2:0] op = is_alui ? insn[14:12] : is_alur ? insn[2:0] : ALU_PASS;
-    wire       is_alu = is_alui | is_alur;
     // jump bits 12..11: 0 always (jmp), 1 if C (bcs), 2 if not C (bcc); 3 is reserved (jumps)
     wire       jump = is_jmp & (insn[12:11] == 2'd0 | (insn[11] & cf1) | (insn[12] & !cf1));
     wire       shl  = op == ALU_SHL;               // op is PASS outside the ALU formats
@@ -128,21 +127,27 @@ module f1_core
     logic [TB-1:0] th2;
     logic [15:0]   xd, xs;
     logic [2:0]    cc2;
-    logic [1:0]    src2;                            // s = 0 rs, 1 sext(i), 2 {i, rd[7:0]}, 3 PC+1
+    logic          rs2;                             // s = rs, else s = im2
+    logic [15:0]   im2;                             // sext(imm), {imm, 0} (ldhi), PC+1 (jal), jump target
     logic          m2, inv2, cin2, shr2;            // ALU controls, see f1_alu
-    logic [1:0]    k2;
+    logic [1:0]    kl2, kh2;                        // k for the low and high byte
     logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, cf2;
     logic [3:0]    off2;
     logic [3:0]    rd2;
-    logic [10:0]   ins2, pc12, pc22;
+    logic [10:0]   pc12, pc22;
     always_ff @(posedge clk) begin
         xd    <= rfa[{th1, insn[11:8]}];
         xs    <= rfb[{th1, ra_s}];
         th2   <= th1;
-        src2  <= (is_alui & !shl) ? 2'd1 : is_alu ? 2'd0 : is_ldhi ? 2'd2 : 2'd3;
+        rs2   <= is_alur | shl;
+        // the constant operand; a jump reads its target from bits 10..0
+        im2   <= is_ldhi ? {insn[7:0], 8'd0} : is_jal ? {5'd0, pc1}
+               : {{5{insn[7]}}, is_jmp ? insn[10:8] : {3{insn[7]}}, insn[7:0]};
         we2   <= is_alui | (is_alur & !insn[3]) | is_ld | is_ldhi | is_jal;
         m2    <= !(op == ALU_ADD || op == ALU_SUB || op == ALU_SHL);
-        k2    <= op == ALU_AND ? 2'd1 : op == ALU_OR ? 2'd2 : op == ALU_XOR ? 2'd3 : 2'd0;
+        kh2   <= op == ALU_AND ? 2'd1 : op == ALU_OR ? 2'd2 : op == ALU_XOR ? 2'd3 : 2'd0;
+        // ldhi keeps rd's low byte as x | 0 (its operand's low byte is 0)
+        kl2   <= op == ALU_AND ? 2'd1 : op == ALU_OR || is_ldhi ? 2'd2 : op == ALU_XOR ? 2'd3 : 2'd0;
         inv2  <= op == ALU_SUB;
         // carry in: 1 for sub; C for rcl and rcr (rs bit 0), which rcr shifts into bit 15
         cin2  <= op == ALU_SUB || (op[2:1] == 2'b11 && is_alur && insn[4] && cf1);
@@ -156,26 +161,19 @@ module f1_core
         jmp2  <= jump;
         cc2   <= insn[2:0];
         rd2   <= insn[11:8];
-        ins2  <= insn[10:0];
         pc12  <= pc1;
         pc22  <= pc2;
         cf2   <= cf1;
     end
 
     // ---- S2: execute ------------------------------------------------------------------
-    logic [15:0] s;
-    always_comb case (src2)
-        2'd0: s = xs;
-        2'd1: s = {{8{ins2[7]}}, ins2[7:0]};
-        2'd2: s = {ins2[7:0], xd[7:0]};
-        default: s = {5'd0, pc12};
-    endcase
+    wire  [15:0] s = rs2 ? xs : im2;
     wire [15:0] y;
     wire        co;
-    f1_alu alu (.m(m2), .k(k2), .inv(inv2), .cin(cin2), .shr(shr2), .x(xd), .s, .y, .co);
+    f1_alu alu (.m(m2), .kl(kl2), .kh(kh2), .inv(inv2), .cin(cin2), .shr(shr2), .x(xd), .s, .y, .co);
     wire c;
     f1_cond cnd (.v(xd), .cf(cf2), .cc(cc2), .t(c));
-    wire [10:0] pcn = jmp2 ? ins2 : jal2 ? xs[10:0] : (sk2 & c) ? pc22 : pc12;
+    wire [10:0] pcn = jmp2 ? im2[10:0] : jal2 ? xs[10:0] : (sk2 & c) ? pc22 : pc12;
     wire        cfn = setc2 ? co : shr2 ? xd[0] : cf2;
     always_ff @(posedge clk) if (g2) pcm[th2] <= {cfn, pcn};
 
@@ -237,8 +235,8 @@ module f1_core
     end
 endmodule
 
-// ALU (Phase 4 step 2a, docs/phase4/alu.md). x = rd, s = rs, the immediate, or rd again
-// for shl. Each bit is 3 logic cells:
+// ALU (Phase 4 step 2a, docs/phase4/alu.md). x = rd, s = rs, the constant im2, or rd
+// again for shl. k is given per byte (kl, kh) so that ldhi keeps rd's low byte. Each bit is 3 logic cells:
 //   adder cell  a = m ? s' : x + s' + carry (bit i), s' = s ^ inv. The sum's LUT has one
 //               input spare, so the choice between the sum and s' costs nothing.
 //   logic LUT   t = a, x & a, x | a or x ^ a, by k
@@ -251,10 +249,12 @@ endmodule
 //     or     1  2  -   -        x | s
 //     xor    1  3  -   -        x ^ s
 //     pass   1  0  -   -        s
+//     ldhi   1  0 / 2 (low byte)  {s[15:8], x[7:0] | 0}: s = {imm, 0}
 //     shr    -  -  -   C (rcr)  {cin, x[15:1]} (shr = 1; C takes x[0] outside the ALU)
 module f1_alu (
     input  wire         m,
-    input  wire  [1:0]  k,
+    input  wire  [1:0]  kl,                     // k for bits 7..0
+    input  wire  [1:0]  kh,                     // k for bits 15..8
     input  wire         inv,
     input  wire         cin,
     input  wire         shr,
@@ -274,6 +274,7 @@ module f1_alu (
     wire [15:0] xr = {cin, x[15:1]};
     wire [15:0] t;
     for (genvar i = 0; i < 16; i++) begin : g_out
+        wire [1:0] k = i < 8 ? kl : kh;
         // t = k 0: a, 1: x & a, 2: x | a, 3: x ^ a      index {I3 a, I2 x, I1 k[1], I0 k[0]}
         f1_lut4 #(.INIT(16'h7DC0)) lt (.i0(k[0]), .i1(k[1]), .i2(x[i]), .i3(a[i]), .o(t[i]));
         // y = shr ? xr : t                               index {I3 -, I2 t, I1 xr, I0 shr}
