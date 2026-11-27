@@ -3,8 +3,8 @@
 **Measured 2026-11-27** on linux-aarch64 with OSS CAD Suite 2026-11-01: Yosys 0.70+286
 (slang) and nextpnr-ice40 0.11.1-85-ga2c64799. The core is in the standard harness
 (`bench/rtl/bench_top.sv`, score sizes) with the board's 1,024-clock start-up hold.
-Tools: `bench/run.py core` (16 seeds) and `bench/ablate.py` (one seed; the cell count is
-the same on every seed).
+Tools: `bench/run.py core` (16 seeds) and `bench/ablate.py --rev d59bb57` (one seed; the
+cell count is the same on every seed). Step 2a has since rewritten the ALU (`alu.md`).
 
 ## Step 0 — The real core, scored
 

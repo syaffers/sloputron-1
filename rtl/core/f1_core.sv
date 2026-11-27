@@ -11,6 +11,7 @@
 // Pipeline, thread t (one stage per clock; the 4 threads occupy the 4 stages):
 //   S0  {C, PC} arrives from pcm -> program ROM read; PC+1 and PC+2 computed
 //   S1  instruction arrives -> register reads, decode; bcc/bcs resolved (C came with the PC)
+//       (rfb reads rd instead of rs for shl, which the ALU does as rd + rd)
 //   S2  operands arrive -> ALU, carry flag, skip condition, data access at rs + k; the
 //       next {C, PC} is written back to pcm
 //   S3  register write (ALU result, or the loaded word)
@@ -120,25 +121,33 @@ module f1_core
     wire       is_alu = is_alui | is_alur;
     // jump bits 12..11: 0 always (jmp), 1 if C (bcs), 2 if not C (bcc); 3 is reserved (jumps)
     wire       jump = is_jmp & (insn[12:11] == 2'd0 | (insn[11] & cf1) | (insn[12] & !cf1));
+    wire       shl  = op == ALU_SHL;               // op is PASS outside the ALU formats
+    // rs port: rd for shl (both forms); the immediate form reads no rs, so it may read rd too
+    wire [3:0] ra_s = (insn[15] && !(is_alur && shl)) ? insn[7:4] : insn[11:8];
 
     logic [TB-1:0] th2;
     logic [15:0]   xd, xs;
-    logic [2:0]    op2, cc2;
+    logic [2:0]    cc2;
     logic [1:0]    src2;                            // s = 0 rs, 1 sext(i), 2 {i, rd[7:0]}, 3 PC+1
-    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, sh2, ci2, cf2;
+    logic          m2, inv2, cin2, shr2;            // ALU controls, see f1_alu
+    logic [1:0]    k2;
+    logic          we2, ld2, st2, sk2, jal2, jmp2, setc2, cf2;
     logic [3:0]    off2;
     logic [3:0]    rd2;
     logic [10:0]   ins2, pc12, pc22;
     always_ff @(posedge clk) begin
         xd    <= rfa[{th1, insn[11:8]}];
-        xs    <= rfb[{th1, insn[7:4]}];
+        xs    <= rfb[{th1, ra_s}];
         th2   <= th1;
-        op2   <= op;
-        src2  <= is_alui ? 2'd1 : is_alur ? 2'd0 : is_ldhi ? 2'd2 : 2'd3;
+        src2  <= (is_alui & !shl) ? 2'd1 : is_alu ? 2'd0 : is_ldhi ? 2'd2 : 2'd3;
         we2   <= is_alui | (is_alur & !insn[3]) | is_ld | is_ldhi | is_jal;
-        setc2 <= is_alu & (op == ALU_ADD || op == ALU_SUB);
-        sh2   <= is_alu & (op == ALU_SHL || op == ALU_SHR);
-        ci2   <= is_alur & insn[4];                 // rcl / rcr: shift C in
+        m2    <= !(op == ALU_ADD || op == ALU_SUB || op == ALU_SHL);
+        k2    <= op == ALU_AND ? 2'd1 : op == ALU_OR ? 2'd2 : op == ALU_XOR ? 2'd3 : 2'd0;
+        inv2  <= op == ALU_SUB;
+        // carry in: 1 for sub; C for rcl and rcr (rs bit 0), which rcr shifts into bit 15
+        cin2  <= op == ALU_SUB || (op[2:1] == 2'b11 && is_alur && insn[4] && cf1);
+        shr2  <= op == ALU_SHR;
+        setc2 <= op == ALU_ADD || op == ALU_SUB || op == ALU_SHL;
         off2  <= insn[3:0];                         // ld / st offset
         ld2   <= is_ld;
         st2   <= is_st;
@@ -163,12 +172,11 @@ module f1_core
     endcase
     wire [15:0] y;
     wire        co;
-    wire        so;
-    f1_alu alu (.op(op2), .x(xd), .s, .ci(ci2 & cf2), .y, .co, .so);
+    f1_alu alu (.m(m2), .k(k2), .inv(inv2), .cin(cin2), .shr(shr2), .x(xd), .s, .y, .co);
     wire c;
     f1_cond cnd (.v(xd), .cf(cf2), .cc(cc2), .t(c));
     wire [10:0] pcn = jmp2 ? ins2 : jal2 ? xs[10:0] : (sk2 & c) ? pc22 : pc12;
-    wire        cfn = setc2 ? co : sh2 ? so : cf2;
+    wire        cfn = setc2 ? co : shr2 ? xd[0] : cf2;
     always_ff @(posedge clk) if (g2) pcm[th2] <= {cfn, pcn};
 
     wire [DA-1:0] ea = xs[DA-1:0] + DA'(off2);       // rs + k
@@ -229,34 +237,87 @@ module f1_core
     end
 endmodule
 
-// ALU: x = rd, s = rs or immediate. co = carry out of add, or 1 = no borrow for sub.
-// ci = the bit a shift brings in (C for rcl/rcr, else 0); so = the bit it drops.
-module f1_alu
-    import isa_pkg::*;
-(
-    input  wire  [2:0]  op,
+// ALU (Phase 4 step 2a, docs/phase4/alu.md). x = rd, s = rs, the immediate, or rd again
+// for shl. Each bit is 3 logic cells:
+//   adder cell  a = m ? s' : x + s' + carry (bit i), s' = s ^ inv. The sum's LUT has one
+//               input spare, so the choice between the sum and s' costs nothing.
+//   logic LUT   t = a, x & a, x | a or x ^ a, by k
+//   shift LUT   y = shr ? x >> 1 (bit 15 = cin) : t
+//     op     m  k  inv cin      result
+//     add    0  0  0   0        x + s, co = carry out
+//     sub    0  0  1   1        x - s, co = 1 if no borrow
+//     shl    0  0  0   C (rcl)  rd + rd = {x[14:0], cin}, co = x[15]
+//     and    1  1  -   -        x & s
+//     or     1  2  -   -        x | s
+//     xor    1  3  -   -        x ^ s
+//     pass   1  0  -   -        s
+//     shr    -  -  -   C (rcr)  {cin, x[15:1]} (shr = 1; C takes x[0] outside the ALU)
+module f1_alu (
+    input  wire         m,
+    input  wire  [1:0]  k,
+    input  wire         inv,
+    input  wire         cin,
+    input  wire         shr,
     input  wire  [15:0] x,
     input  wire  [15:0] s,
-    input  wire         ci,
-    output logic [15:0] y,
-    output wire         co,
-    output wire         so
+    output wire  [15:0] y,
+    output wire         co
 );
-    wire sub = op == ALU_SUB;
-    /* verilator lint_off UNUSEDSIGNAL */       // sum[0] is the carry-in position
-    wire [17:0] sum = {1'b0, x, 1'b1} + {1'b0, s ^ {16{sub}}, sub};
-    /* verilator lint_on UNUSEDSIGNAL */
-    assign co = sum[17];
-    always_comb case (op)
-        ALU_ADD, ALU_SUB: y = sum[16:1];
-        ALU_AND:  y = x & s;
-        ALU_OR:   y = x | s;
-        ALU_XOR:  y = x ^ s;
-        ALU_PASS: y = s;
-        ALU_SHL:  y = {x[14:0], ci};
-        default:  y = {ci, x[15:1]};
-    endcase
-    assign so = op == ALU_SHL ? x[15] : x[0];
+    wire [15:0] sp = s ^ {16{inv}};
+    wire [16:0] c;
+    wire [15:0] a;
+    assign c[0] = cin;
+    for (genvar i = 0; i < 16; i++) begin : g_bit
+        f1_addcell u (.m, .x(x[i]), .s(sp[i]), .ci(c[i]), .a(a[i]), .co(c[i + 1]));
+    end
+    assign co = c[16];
+    wire [15:0] xr = {cin, x[15:1]};
+    wire [15:0] t;
+    for (genvar i = 0; i < 16; i++) begin : g_out
+        // t = k 0: a, 1: x & a, 2: x | a, 3: x ^ a      index {I3 a, I2 x, I1 k[1], I0 k[0]}
+        f1_lut4 #(.INIT(16'h7DC0)) lt (.i0(k[0]), .i1(k[1]), .i2(x[i]), .i3(a[i]), .o(t[i]));
+        // y = shr ? xr : t                               index {I3 -, I2 t, I1 xr, I0 shr}
+        f1_lut4 #(.INIT(16'hD8D8)) ly (.i0(shr), .i1(xr[i]), .i2(t[i]), .i3(1'b0), .o(y[i]));
+    end
+endmodule
+
+// One iCE40 LUT with its truth table given, for logic Yosys maps less tightly.
+module f1_lut4 #(
+    parameter logic [15:0] INIT = 16'h0000
+) (
+    input  wire i0,
+    input  wire i1,
+    input  wire i2,
+    input  wire i3,
+    output wire o
+);
+`ifdef VERILATOR
+    assign o = INIT[{i3, i2, i1, i0}];
+`else
+    SB_LUT4 #(.LUT_INIT(INIT)) lut (.I0(i0), .I1(i1), .I2(i2), .I3(i3), .O(o));
+`endif
+endmodule
+
+// One adder bit as one iCE40 logic cell: SB_LUT4 (a = m ? s : x ^ s ^ ci) and SB_CARRY
+// (co = majority of x, s, ci). nextpnr packs the pair into one cell because the LUT reads
+// the carry's inputs (I1, I2) and its carry in (I3). Yosys cannot put m into the sum's LUT
+// itself, so the cells are instantiated; Verilator runs the same truth table.
+module f1_addcell (
+    input  wire m,
+    input  wire x,
+    input  wire s,
+    input  wire ci,
+    output wire a,
+    output wire co
+);
+    localparam logic [15:0] INIT = 16'hE1B4;    // index {I3 ci, I2 s, I1 x, I0 m}
+`ifdef VERILATOR
+    assign a  = INIT[{ci, s, x, m}];
+    assign co = (x & s) | ((x | s) & ci);
+`else
+    SB_LUT4 #(.LUT_INIT(INIT)) lut (.I0(m), .I1(x), .I2(s), .I3(ci), .O(a));
+    SB_CARRY cy (.I0(x), .I1(s), .CI(ci), .CO(co));
+`endif
 endmodule
 
 // Skip conditions (isa.toml [[cond]]).
@@ -279,3 +340,29 @@ module f1_cond
         default: t = v[0];
     endcase
 endmodule
+
+// The two iCE40 primitives f1_addcell uses, declared as black boxes so the slang front end
+// accepts them (as rtl/lib/sb_pll40_core.sv does for the PLL). synth_ice40 maps them to
+// its own cells.
+`ifndef VERILATOR
+(* blackbox *)
+module SB_LUT4 #(
+    parameter logic [15:0] LUT_INIT = 16'h0000
+) (
+    input  wire I0,
+    input  wire I1,
+    input  wire I2,
+    input  wire I3,
+    output wire O
+);
+endmodule
+
+(* blackbox *)
+module SB_CARRY (
+    input  wire I0,
+    input  wire I1,
+    input  wire CI,
+    output wire CO
+);
+endmodule
+`endif
