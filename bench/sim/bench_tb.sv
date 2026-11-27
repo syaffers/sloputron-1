@@ -2,7 +2,8 @@
 // bench_top with a 4096-word data memory and waits until every thread has stored to the
 // done address (0xFFF). It then compares the whole data memory, except that shared done
 // word, with the image the reference interpreter expects. It prints the cycle count to the last thread's done
-// store; all N copies run at once.
+// store; all N copies run at once. For the CPU core (CORE 0) cycles count from the clock its
+// start-up hold ends, so they compare with r_f1's: the hold happens once, at power-up.
 `timescale 1ns/1ps
 `default_nettype none
 module bench_run #(parameter int CORE = 1, parameter int N = 4, parameter bit FWD = 0,
@@ -24,9 +25,17 @@ module bench_run #(parameter int CORE = 1, parameter int N = 4, parameter bit FW
     logic [15:0] expect_mem [4096];
     initial $readmemh(EXPECT, expect_mem);
 
+    wire started;                                   // CORE 0: the start-up hold is over
+    generate if (CORE == 0) begin : g_go
+        assign started = dut.g_core.cpu.go;
+    end else begin : g_nogo
+        assign started = 1'b1;
+    end endgenerate
+
     int cycles = 0, finished = 0, wrong = 0;
     initial begin
         done = 0; pass = 0;
+        while (!started) @(posedge clk);
         while (cycles < 2_000_000 && finished < THREADS) begin
             @(posedge clk);
             cycles++;
@@ -83,11 +92,13 @@ module r_f1_tb;
     bench_finish #(.K(8)) f (.d, .p);
 endmodule
 
-// The CPU core (rtl/core/f1_core.sv, ISA 1.0) on the kernels with every extension (X = 15)
+// The CPU core (rtl/core/f1_core.sv, ISA 1.0): the scored kernels (X = 7, as r_f1 x7) and the
+// unrolled ones (X = 15)
 module f1_core_tb;
-    wire [0:0] d, p;
-    bench_core #(.CORE(0), .N(4), .X(15), .NAME("f1_core, ISA 1.0")) a (.done(d[0]), .pass(p[0]));
-    bench_finish #(.K(1)) f (.d, .p);
+    wire [1:0] d, p;
+    bench_core #(.CORE(0), .N(4), .X(7),  .NAME("F1 core x7, 4 threads"))  a (.done(d[0]), .pass(p[0]));
+    bench_core #(.CORE(0), .N(4), .X(15), .NAME("F1 core x15, 4 threads")) b (.done(d[1]), .pass(p[1]));
+    bench_finish #(.K(2)) f (.d, .p);
 endmodule
 
 module r_f5_tb;

@@ -75,11 +75,11 @@ docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
 docs/phase3/              Phase 3: summary.md (outcome, lessons), benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
-docs/phase4/              Phase 4: plan.md (optimise cells and clock)
+docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
-bench/                    Phase 3 benchmark cores (F1, F5; ISA v3 + D-008 extensions X): rtl/, sim/, kernels.py (assembler, kernels, reference interpreter), run.py (16-seed sweep -> bench.csv), score.py (figure of merit -> score.csv)
+bench/                    benchmark cores: Phase 3 copies (F1, F5; ISA v3 + D-008 extensions X) and, from Phase 4, f1_core itself (variant `core`): rtl/, sim/, kernels.py (assembler, kernels, reference interpreter), run.py (16-seed sweep -> bench.csv), score.py (figure of merit -> score.csv), ablate.py (cells per block -> ablate.csv)
 skel/                     F1–F5 datapath skeletons: rtl/, sim/ (crc16 + hazard tests), asm.py (+ reference interpreter), run.py (16-seed sweep), skel.csv
 scripts/pnr_sweep.py      multi-seed nextpnr sweep -> LC, BRAM, Fmax median/worst/best (JSON/CSV)
 scripts/report.py         append results.csv rows; scripts/check_results.py = CI gate
@@ -156,10 +156,12 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
     - `make sim-lockstep` checks every RTL instruction against it: demo, stress and 8
       random ROMs, 0 mismatches;
     - all 9 planted bugs were caught.
-- **Phase 4 (planned): optimise cells and clock** (`docs/phase4/plan.md`). The ISA stays
-  at 1.0.
-  0. Score the real core (`f1_core`) instead of the benchmark copy; owner decision, D-009.
-  1. Find where the cells go (hierarchy + ablation) → `docs/phase4/breakdown.md`.
+- **Phase 4 (in progress): optimise cells and clock** (`docs/phase4/plan.md`). The ISA
+  stays at 1.0.
+  0. Done: the real core (`f1_core`, with its start-up hold) is 374 LC, 95.4 / 90.7 MHz,
+     score 46,175 (`bench/run.py core`). D-009 proposes it as the baseline (owner decides).
+  1. Done: `docs/phase4/breakdown.md` (`bench/ablate.py`). ALU result multiplexer 102 LC,
+     next-PC + PC+2 63, operand multiplexer 49, write-back multiplexer 20, hold 19.
   2. Shrink the largest blocks (shifts through the adder, logic operations in one LUT per
      bit, next-PC adders, start-up hold, recheck the offset).
   3. Shorten the critical path (register read → adder → C → `pcm` write): keep C in 4

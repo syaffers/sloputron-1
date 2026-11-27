@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""D-002 figure of merit for the Phase 3 benchmark cores (D-005).
+"""D-002 figure of merit for the benchmark cores (Phase 3, D-005) and the CPU core (Phase 4, D-009).
 
-usage: bench/score.py      (after bench/run.py; runs `make sim-r_f1 sim-r_f5` for cycle counts)
+usage: bench/score.py      (after bench/run.py; runs `make sim-r_f1 sim-r_f5 sim-f1_core` for
+                           cycle counts)
 
 Per kernel: iterations/s = copies x Fmax median / cycles for all copies to finish, where a
 barrel runs N copies at once (D-004) and F5 runs one. Divided by the cells of the core in
@@ -16,8 +17,10 @@ KERNELS = ("crc16", "sort", "mul16", "memcpy")
 SIMS = {"F1, 4 threads": "f1_n4", "F1, 8 threads": "f1_n8", "F5, stalls": "f5",
         "F5, forwarding": "f5_fwd", "F1 x1, 4 threads": "f1x1", "F1 x2, 4 threads": "f1x2",
         "F1 x3, 4 threads": "f1x3", "F1 x7, 4 threads": "f1x7",
-        "F1 x11, 4 threads": "f1x11", "F1 x15, 4 threads": "f1x15"}
-HW = {"f1x11": "f1x3", "f1x15": "f1x7"}     # unrolled kernels (X bit 3) run on the same hardware
+        "F1 x11, 4 threads": "f1x11", "F1 x15, 4 threads": "f1x15",
+        "F1 core x7, 4 threads": "core", "F1 core x15, 4 threads": "core_x15"}
+# unrolled kernels (X bit 3) run on the same hardware
+HW = {"f1x11": "f1x3", "f1x15": "f1x7", "core_x15": "core"}
 
 
 def cycles():
@@ -25,11 +28,11 @@ def cycles():
     tools = os.path.join(ROOT, "tools", "oss-cad-suite", "bin")
     if os.path.isdir(tools):
         env["PATH"] = tools + os.pathsep + env["PATH"]
-    out = subprocess.run(["make", "-s", "sim-r_f1", "sim-r_f5"], cwd=ROOT, env=env, check=True,
+    out = subprocess.run(["make", "-s", "sim-r_f1", "sim-r_f5", "sim-f1_core"], cwd=ROOT, env=env, check=True,
                          capture_output=True, text=True).stdout
     c = {}
     for line in out.splitlines():
-        m = re.match(r"(F\d(?: x\d+)?, [a-z0-9 ]+?)\s+(\w+)\s+(\d+)/(\d+) done, 0 words wrong, cycles (\d+)", line)
+        m = re.match(r"(F\d(?: core)?(?: x\d+)?, [a-z0-9 ]+?)\s+(\w+)\s+(\d+)/(\d+) done, 0 words wrong, cycles (\d+)", line)
         if m and m.group(2) in KERNELS and m.group(3) == m.group(4):
             c[(SIMS[m.group(1)], m.group(2))] = (int(m.group(5)), int(m.group(4)))
     assert len(c) == len(SIMS) * len(KERNELS), sorted(c)
