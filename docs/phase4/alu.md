@@ -124,3 +124,30 @@ In the median seed it now runs:
 > next-PC choice (2 levels) → `pcm` write. 9.45 ns.
 
 The skip test is plan step 3's second item. The adder is off the critical path.
+
+## On the board (after step 2b)
+
+Run 2026-11-27 on the iCEstick, the same board as in Phase 3.
+
+- **12 MHz:** `make prog D=sloputron` then `make uart-test`. Flash verify OK, and the
+  4,096-byte echo passes with 0 bad chunks.
+- **PLL clock sweep:** `scripts/board_sweep.py` with `programs/stress.s` (results in
+  `board_sweep.csv`). Each point is its own build and placement. It passes when every
+  reply is well formed, no worker counts a failure, and the clock measured from the pass
+  rate matches the PLL setting.
+
+| seed | 12–108 | 114 | 120 | 126 | 132 | 138 | 144 MHz |
+|---|---|---|---|---|---|---|---|
+| 1 | P (12, 60, 90, 102, 108) | P | P | P | P | F | F |
+| 2 | | P | P | P | P | F | F |
+| 3 | | P | P | P | P | F | F |
+
+- **Every build runs correctly up to 132 MHz**, against 126 MHz for the Phase 3 core
+  (`docs/phase3/board.md`). The measured clock was within 0.3% of the setting at every
+  passing point.
+- nextpnr predicted 81–103 MHz for these builds (one seed each). So the margin found in
+  Phase 3 still holds: the board runs at least 28% faster than nextpnr's figure.
+- At 138 MHz, one build gave a few wrong answers and the others stopped answering.
+- These builds hold the PLL and the stress program and use 419–429 cells; the 12 MHz build
+  uses 401.
+- Caveats as in Phase 3: one board, room temperature, a few seconds per point.

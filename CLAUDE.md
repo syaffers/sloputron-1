@@ -75,7 +75,7 @@ docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
 docs/phase3/              Phase 3: summary.md (outcome, lessons), benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
-docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation), alu.md (steps 2a-2b)
+docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation), alu.md (steps 2a-2b, board sweep), board_sweep.csv
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
@@ -167,7 +167,9 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
        logic LUT and a shift LUT per bit; shl as rd + rd): 312 LC, 93.5 MHz, score 54,208.
      - 2b done: the operand is "rs or im2", where im2 is one constant register set in S1
        (sext imm, {imm, 0} for ldhi, PC+1 for jal, the jump target):
-       **301 LC, 101.8 / 97.4 MHz, score 61,215**; board 401 LC, 97.7 / 94.6 MHz.
+       **301 LC, 101.8 / 97.4 MHz, score 61,215**; board 401 LC, 97.7 / 94.6 MHz. On the
+       board (2026-11-27): echo passes; the PLL sweep passes up to 132 MHz on 3 builds
+       (126 in Phase 3), fails at 138 (`docs/phase4/board_sweep.csv`).
      - Critical path now: register read → skip test (zero detect) → next PC → `pcm` write.
      - Next: PC+2, start-up hold.
   3. Shorten the critical path (register read → adder → C → `pcm` write): keep C in 4
