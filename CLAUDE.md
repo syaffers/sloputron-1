@@ -75,7 +75,7 @@ docs/phase0/              baselines.md, bibliography.md, tricks.md, shortlist.md
 docs/phase1/bringup.md    board bring-up steps and checklist
 docs/phase2/              Phase 2 experiments (j1a_bram.md, primitives.md, skeletons.md)
 docs/phase3/              Phase 3: summary.md (outcome, lessons), benchmarks.md (D-002 kernels, ISA 1.0 study), board.md (the CPU on the iCEstick, PLL sweep), board_sweep.csv, verification.md (C ISS, lockstep)
-docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation)
+docs/phase4/              Phase 4: plan.md (optimise cells and clock), breakdown.md (step 0 score of the real core, step 1 ablation), alu.md (step 2a)
 docs/decisions/           decision record index
 baselines/                uniform harnesses for third-party cores + build.sh + results CSVs
 prims/                    primitive cost table: prims.sv, run.py (harness + 16-seed sweep), prims.csv
@@ -162,8 +162,10 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
      score 46,175 (`bench/run.py core`). D-009: it is the Phase 4 baseline.
   1. Done: `docs/phase4/breakdown.md` (`bench/ablate.py`). ALU result multiplexer 102 LC,
      next-PC + PC+2 63, operand multiplexer 49, write-back multiplexer 20, hold 19.
-  2. Shrink the largest blocks (shifts through the adder, logic operations in one LUT per
-     bit, next-PC adders, start-up hold, recheck the offset).
+  2. Shrink the largest blocks. 2a done (`docs/phase4/alu.md`): the ALU result path mapped by
+     hand (sum or s from the adder's own LUT, then a logic LUT and a shift LUT per bit; shl
+     as rd + rd): **312 LC, 93.5 / 91.4 MHz, score 54,208**; board 411 LC, 90.6 / 84.9 MHz.
+     Next: the operand multiplexer (now on the critical path), PC+2, start-up hold.
   3. Shorten the critical path (register read → adder → C → `pcm` write): keep C in 4
      flip-flops written a stage later; then the skip path; 8 threads only if needed.
 

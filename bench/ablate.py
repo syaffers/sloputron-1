@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 4 step 1: where the cells of the CPU core go (docs/phase4/breakdown.md).
 
-usage: bench/ablate.py [--seeds 1] [--csv bench/ablate.csv] [ablation ...]
+usage: bench/ablate.py [--rev d59bb57] [--seeds 1] [--csv bench/ablate.csv] [ablation ...]
 
 Two measurements of rtl/core/f1_core.sv in the standard harness (bench_top CORE 0, score
 sizes, the board's 1024-clock start-up hold), as bench/run.py builds it for the score:
@@ -11,6 +11,8 @@ sizes, the board's 1024-clock start-up hold), as bench/run.py builds it for the 
              copy of f1_core.sv. The change in nextpnr's logic cells (ICESTORM_LC) is what
              that block costs once packed. The cell count is the same on every seed, so one
              seed is enough; --seeds > 1 also reports Fmax.
+The substitutions match f1_core.sv as it was for step 1 (commit d59bb57, before step 2a
+rewrote the ALU); --rev reads the core from that commit. The "base" row works on any version.
 An ablated core does not run the ISA: it is a measuring device only. The blocks overlap
 (for example the operand multiplexer feeds the adder), so the savings do not add up to the
 total exactly.
@@ -118,9 +120,12 @@ def place(name, d, net, seeds):
     return json.load(open(out))
 
 
-def hierarchy():
+def hierarchy(src):
     d = os.path.join(BUILD, "hierarchy")
-    mods = json.load(open(synth(d, CORE, flatten=False)))["modules"]
+    os.makedirs(d, exist_ok=True)
+    core = os.path.join(d, "f1_core.sv")
+    open(core, "w").write(src)
+    mods = json.load(open(synth(d, core, flatten=False)))["modules"]
     rows = {}
     for m, body in mods.items():
         name = re.sub(r"^\$paramod.*?\\", "", m).split("$")[0]
@@ -135,15 +140,17 @@ def main():
     p.add_argument("--seeds", type=int, default=1)
     p.add_argument("--csv", default=os.path.join(ROOT, "bench", "ablate.csv"))
     p.add_argument("--hierarchy-only", action="store_true")
+    p.add_argument("--rev", help="git revision to read f1_core.sv from (default: the working tree)")
     a = p.parse_args()
 
+    src = (subprocess.run(["git", "show", f"{a.rev}:rtl/core/f1_core.sv"], cwd=ROOT, check=True,
+                          capture_output=True, text=True).stdout if a.rev else open(CORE).read())
     print("hierarchy (Yosys, -noflatten):")
-    for m, c in hierarchy().items():
+    for m, c in hierarchy(src).items():
         print(f"  {m:12s} LUT {c['luts']:4d}  carry {c['carries']:3d}  FF {c['ffs']:4d}")
     if a.hierarchy_only:
         return
 
-    src = open(CORE).read()
     rows = []
     for name, block, subs in [("base", "f1_core as it is", [])] + ABLATIONS:
         if a.only and name != "base" and name not in a.only:

@@ -2,7 +2,8 @@
 
 **Status:** steps 0 and 1 measured, 2026-11-27 (`breakdown.md`). The real core is 374 cells,
 95.4 MHz, score 46,175; D-009 makes it the baseline (accepted). The table there re-orders
-step 2. Every expected gain below is an estimate and is labelled as one.
+step 2. Step 2a (the ALU result path, `alu.md`): 312 cells, 93.5 MHz, score 54,208. Every
+expected gain below is an estimate and is labelled as one.
 
 ## Goal
 Raise the figure of merit (D-002): iterations/s per 1000 core cells, as the geometric mean

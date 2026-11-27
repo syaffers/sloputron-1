@@ -12,5 +12,5 @@ f1x2,F1 4 threads + carry shifts,score,4,350,12,286,33,108,89.5,86.27,16
 f1x3,F1 4 threads + both,score,4,348,12,285,33,108,93.2,90.77,16
 f1x7,F1 4 threads + both + ld/st offset,score,4,354,12,291,40,108,95.41,91.82,16
 fit_f1x7,F1 4 threads + both + ld/st offset,fit,4,421,10,355,43,111,90.14,87.12,16
-core,f1_core (ISA 1.0),score,4,374,12,304,48,123,95.44,90.7,16
-fit_core,f1_core (ISA 1.0),fit,4,454,10,380,51,126,92.11,84.74,16
+core,f1_core (ISA 1.0),score,4,312,12,244,48,124,93.47,91.42,16
+fit_core,f1_core (ISA 1.0),fit,4,378,10,307,51,127,94.46,86.35,16
