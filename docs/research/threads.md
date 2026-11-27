@@ -33,6 +33,9 @@ Five things about where we stand, before the threads:
 ## The threads
 
 ### T1 — Timing isolation, proven (security, guaranteed bounds)
+**Taken up (D-010):** the theorem first, then a k-induction proof, planted leaks and vacuity
+checks.
+
 **Question.** Can we *prove* on the RTL that no thread can learn anything about another
 thread's data from timing? And that each instruction takes exactly N clocks?
 
@@ -136,6 +139,11 @@ the board actually fails? Should the score use a measured clock?
 - test whether nextpnr's figure ranks the builds in the same order as the board does.
 
 The early data says it does not: one build that nextpnr put at 77.8 MHz ran at 123 MHz.
+
+**Taken up (D-010).** First analysis in `t5_timing.md`:
+- in 14 of 34 board builds, nextpnr's figure came from the UART receiver's counter, not
+  the CPU (this includes the 77.8 MHz build);
+- passes and failures overlap at 1.41–1.63× nextpnr's figure.
 
 **Measure.** The correlation between predicted and measured clocks, how much the
 measurements move from run to run, and temperature if we can control it.
