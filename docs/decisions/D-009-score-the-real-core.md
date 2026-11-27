@@ -1,6 +1,6 @@
 # D-009 — Score the CPU core itself, not its benchmark copy
 
-**Status:** proposed, 2026-11-27. Needs the owner's decision (Phase 4 plan, step 0).
+**Status:** accepted by the owner, 2026-11-27 (Phase 4 plan, step 0).
 **Builds on:** D-002 (figure of merit), D-006 (F1, 4 threads) and D-008 (ISA 1.0).
 
 ## Context
@@ -32,7 +32,7 @@ Standard harness, 16 seeds, OSS CAD Suite 2026-11-01, linux-aarch64
 
 The cycles are identical. 19 of the 20 extra cells are the start-up hold.
 
-## Decision (proposed)
+## Decision
 Option 2. **The Phase 4 baseline is 374 cells, 95.4 MHz, score 46,175.** From here on,
 every score is for `f1_core` (`bench/run.py core`, `bench/score.py`, row `core`). Phase 4
 reports its result against both 46,175 (like for like) and 48,768 (Phase 3).

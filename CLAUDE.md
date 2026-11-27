@@ -159,7 +159,7 @@ cd baselines && SEEDS=16 ./build.sh   # third-party baselines (after scripts/fet
 - **Phase 4 (in progress): optimise cells and clock** (`docs/phase4/plan.md`). The ISA
   stays at 1.0.
   0. Done: the real core (`f1_core`, with its start-up hold) is 374 LC, 95.4 / 90.7 MHz,
-     score 46,175 (`bench/run.py core`). D-009 proposes it as the baseline (owner decides).
+     score 46,175 (`bench/run.py core`). D-009: it is the Phase 4 baseline.
   1. Done: `docs/phase4/breakdown.md` (`bench/ablate.py`). ALU result multiplexer 102 LC,
      next-PC + PC+2 63, operand multiplexer 49, write-back multiplexer 20, hold 19.
   2. Shrink the largest blocks (shifts through the adder, logic operations in one LUT per

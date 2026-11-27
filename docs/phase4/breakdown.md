@@ -8,8 +8,7 @@ the same on every seed).
 
 ## Step 0 — The real core, scored
 
-`f1_core` replaces its benchmark copy `r_f1` (X = 7) as the scored core, subject to the
-owner's decision D-009.
+`f1_core` replaces its benchmark copy `r_f1` (X = 7) as the scored core (D-009, accepted).
 
 | | Cells | Fmax median / worst (16 seeds) | Score |
 |---|---:|---|---:|
