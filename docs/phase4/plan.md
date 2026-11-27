@@ -1,7 +1,7 @@
 # Phase 4 — Plan: optimise cells and clock
 
 **Status:** steps 0 and 1 measured, 2026-11-27 (`breakdown.md`). The real core is 374 cells,
-95.4 MHz, score 46,175; D-009 (re-baseline on it) is proposed. The table there re-orders
+95.4 MHz, score 46,175; D-009 makes it the baseline (accepted). The table there re-orders
 step 2. Every expected gain below is an estimate and is labelled as one.
 
 ## Goal
@@ -49,7 +49,7 @@ The score so far comes from `bench/rtl/r_f1.sv` with X = 7. The board runs
 **Expected** (estimate): about 375 cells, so a score near 46,000, lower than 48,768. The
 hold is part of the CPU, so it should count.
 
-**Owner decision:** re-baseline on the real core, to be recorded as D-009.
+**Owner decision:** re-baseline on the real core. Accepted as D-009, 2026-11-27.
 
 ## Step 1 — Find where the cells go
 **Two measurements:**
